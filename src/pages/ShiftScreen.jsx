@@ -1,6 +1,7 @@
 // ShiftScreen.jsx - Updated with cash counting fields
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { db, enqueue } from '../db/offlineDb';
 import { api, apiFetch, OfflineError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -625,9 +626,36 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
 }
 
 // ============================================================================
-// DEBT MODAL
+// DEBT MODAL - now with an existing-customer search/picker, same pattern as
+// POS.jsx's SettleModal, so a waiter doesn't have to retype a name/phone that
+// might not exactly match an existing record (which would silently create a
+// duplicate customer instead of adding to their real outstanding balance).
+// Unlike POS.jsx, this does NOT pre-create the customer via a separate API
+// call — it only fills in name/phone from the picker. /api/sales/:id/debt
+// already looks up-or-creates by phone/name server-side, and keeping it that
+// way preserves this screen's offline support (recordAsDebt can enqueue to
+// the outbox when offline; an upfront customer-creation call could not).
 // ============================================================================
 function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error, success }) {
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const existingCustomers = useLiveQuery(() => db.customers.toArray(), [], []);
+
+  useEffect(() => {
+    if (navigator.onLine) {
+      api.customers()
+        .then(c => db.customers.bulkPut(c))
+        .catch(() => {});
+    }
+  }, []);
+
+  // If the currently-filled name/phone matches a known customer, surface
+  // their existing balance so the waiter can see they may already owe money.
+  const matchedExisting = (existingCustomers || []).find(c =>
+    (customer.phone && c.phone === customer.phone) ||
+    (!customer.phone && customer.name && c.name === customer.name)
+  );
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
@@ -675,35 +703,111 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
-                  Customer Name <span className="text-rose-500">*</span>
+                  Customer <span className="text-rose-500">*</span>
                 </label>
-                <div className="relative">
-                  <IconUser className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={customer.name}
-                    onChange={e => setCustomer(c => ({ ...c, name: e.target.value }))}
-                    placeholder="e.g. John Doe"
-                    className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-2.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
-                    autoFocus
-                  />
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
-                  Phone Number
-                </label>
-                <div className="relative">
-                  <IconPhone className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="tel"
-                    value={customer.phone}
-                    onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))}
-                    placeholder="e.g. 0712 345 678"
-                    className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-2.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
-                  />
-                </div>
+                {customer.name && !showManualEntry ? (
+                  <div className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm">
+                        <IconUser className="w-4 h-4 text-neutral-400" />
+                        <span className="font-medium text-ink-950">{customer.name}</span>
+                        {customer.phone && <span className="text-neutral-400 text-xs">{customer.phone}</span>}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setCustomer(c => ({ ...c, name: '', phone: '' }));
+                          setCustomerSearch('');
+                        }}
+                        className="text-xs text-neutral-400 hover:text-neutral-600"
+                      >
+                        change
+                      </button>
+                    </div>
+                    {matchedExisting && matchedExisting.balance > 0 && (
+                      <div className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                        <IconAlert className="w-3 h-3" /> Already owes {money(matchedExisting.balance)}
+                      </div>
+                    )}
+                  </div>
+                ) : showManualEntry ? (
+                  <div className="space-y-2.5">
+                    <div className="relative">
+                      <IconUser className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={customer.name}
+                        onChange={e => setCustomer(c => ({ ...c, name: e.target.value }))}
+                        placeholder="e.g. John Doe"
+                        className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-2.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="relative">
+                      <IconPhone className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="tel"
+                        value={customer.phone}
+                        onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))}
+                        placeholder="e.g. 0712 345 678"
+                        className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-2.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        setCustomer(c => ({ ...c, name: '', phone: '' }));
+                        setShowManualEntry(false);
+                      }}
+                      className="text-xs text-neutral-400 hover:text-neutral-600"
+                    >
+                      ← search existing customers instead
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <input
+                        value={customerSearch}
+                        onChange={e => setCustomerSearch(e.target.value)}
+                        placeholder="Search customer by name/phone…"
+                        className="flex-1 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => { setShowManualEntry(true); setCustomerSearch(''); }}
+                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-2.5 rounded-lg transition whitespace-nowrap"
+                      >
+                        + New
+                      </button>
+                    </div>
+                    <div className="max-h-32 overflow-y-auto border border-neutral-200 rounded-lg bg-white">
+                      {(existingCustomers || [])
+                        .filter(c => c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                               (c.phone && c.phone.includes(customerSearch)))
+                        .slice(0, 20)
+                        .map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => {
+                              setCustomer(cur => ({ ...cur, name: c.name, phone: c.phone || '' }));
+                              setCustomerSearch('');
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex justify-between"
+                          >
+                            <span>{c.name}</span>
+                            <span className="text-neutral-400 text-xs">
+                              {c.phone || 'no phone'} · owes {money(c.balance || 0)}
+                            </span>
+                          </button>
+                        ))}
+                      {(!existingCustomers || existingCustomers.length === 0) && (
+                        <div className="p-3 text-xs text-neutral-400">
+                          No customers found. Click "+ New" to add one.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div>

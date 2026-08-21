@@ -18,6 +18,22 @@ export default function AuditLog() {
 function LogView() {
   const [rows, setRows] = useState([]);
   useEffect(() => { api.auditLog().then(setRows).catch(() => {}); }, []);
+  
+  // Helper function to format time in Kenyan timezone
+  const formatKenyanTime = (timestamp) => {
+    if (!timestamp) return '—';
+    return new Date(timestamp).toLocaleString('en-KE', {
+      timeZone: 'Africa/Nairobi',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
       <table className="w-full text-sm">
@@ -25,7 +41,7 @@ function LogView() {
         <tbody>
           {rows.map(r => (
             <tr key={r.id} className="border-t align-top">
-              <td className="p-3 whitespace-nowrap text-neutral-500">{new Date(r.created_at).toLocaleString()}</td>
+              <td className="p-3 whitespace-nowrap text-neutral-500">{formatKenyanTime(r.created_at)}</td>
               <td className="p-3 font-medium">{r.event}</td>
               <td className="p-3">{r.user_name || '—'} <span className="text-xs text-neutral-400">{r.role}</span></td>
               <td className="p-3 text-neutral-500">{r.entity_type} {r.entity_id ? `#${r.entity_id}` : ''}</td>
@@ -50,6 +66,21 @@ function CorrectionsView() {
     load();
   }
 
+  // Helper function to format time in Kenyan timezone
+  const formatKenyanTime = (timestamp) => {
+    if (!timestamp) return '—';
+    return new Date(timestamp).toLocaleString('en-KE', {
+      timeZone: 'Africa/Nairobi',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm divide-y">
       {rows.map(r => (
@@ -57,7 +88,9 @@ function CorrectionsView() {
           <div className="flex justify-between items-start">
             <div>
               <div className="font-medium">{r.type} — {r.ref_type} #{r.ref_id}</div>
-              <div className="text-xs text-neutral-400">by {r.requested_by_name} · {new Date(r.created_at).toLocaleString()}</div>
+              <div className="text-xs text-neutral-400">
+                by {r.requested_by_name} · {formatKenyanTime(r.created_at)}
+              </div>
               <div className="text-sm text-neutral-600 mt-1">{r.reason}</div>
             </div>
             <span className={`text-xs px-2 py-1 rounded-full font-medium ${r.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : r.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{r.status}</span>
