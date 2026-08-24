@@ -51,6 +51,7 @@ export async function apiFetch(path, { method = 'GET', body, skipAuth = false } 
 }
 
 export const api = {
+  // Auth
   login: (username, password, deviceId, deviceName) =>
     apiFetch('/api/auth/login', { method: 'POST', body: { username, password, deviceId, deviceName }, skipAuth: true }),
   me: () => apiFetch('/api/auth/me'),
@@ -67,11 +68,7 @@ export const api = {
   currentShift: () => apiFetch('/api/shifts/current'),
   shiftReport: (id) => apiFetch(`/api/shifts/${id}/report`),
   shifts: (params = '') => apiFetch(`/api/shifts${params}`),
-  
-  // NEW: Start a shift
   startShift: (body) => apiFetch('/api/shifts/start', { method: 'POST', body }),
-  
-  // NEW: End a shift
   endShift: (shiftId, body) => apiFetch(`/api/shifts/${shiftId}/end`, { method: 'POST', body }),
 
   // Sales
@@ -99,6 +96,12 @@ export const api = {
   lowStock: () => apiFetch('/api/inventory/low-stock'),
   suppliers: () => apiFetch('/api/expenses/suppliers'),
   createSupplier: (body) => apiFetch('/api/expenses/suppliers', { method: 'POST', body }),
+  receiveStock: (body) => apiFetch('/api/inventory/receive', { method: 'POST', body }),
+  adjustStock: (body) => apiFetch('/api/inventory/adjust', { method: 'POST', body }),
+  stocktake: (body) => apiFetch('/api/inventory/stocktake', { method: 'POST', body }),
+  stocktakeCount: (id, body) => apiFetch(`/api/inventory/stocktake/${id}/count`, { method: 'POST', body }),
+  stocktakeApprove: (id) => apiFetch(`/api/inventory/stocktake/${id}/approve`, { method: 'POST', body }),
+  stocktakeDiscrepancies: (limit = 200) => apiFetch(`/api/inventory/stocktake/discrepancies?limit=${limit}`),
 
   // Expenses
   expenses: (params = '') => apiFetch(`/api/expenses${params}`),
@@ -111,12 +114,27 @@ export const api = {
 
   // Reports
   dashboard: () => apiFetch('/api/reports/dashboard'),
+  operations: () => apiFetch('/api/reports/operations'),
   salesReport: (params = '') => apiFetch(`/api/reports/sales${params}`),
   productReport: (params = '') => apiFetch(`/api/reports/products${params}`),
   waiterReport: (params = '') => apiFetch(`/api/reports/waiters${params}`),
   profitReport: (params = '') => apiFetch(`/api/reports/profit${params}`),
   stockReport: () => apiFetch('/api/reports/stock'),
   creditReport: () => apiFetch('/api/reports/credit'),
+  exportReport: (params = '') => apiFetch(`/api/reports/export${params}`),
+
+  // Stock Reconciliation (NEW)
+  getStockReconciliation: (shiftId) => 
+    apiFetch(`/api/stock-reconciliation/shift/${shiftId}`),
+  
+  saveReconciliationNotes: (data) => 
+    apiFetch('/api/stock-reconciliation/save-notes', { method: 'POST', body: data }),
+  
+  getRecentReconciliations: (limit = 20) => 
+    apiFetch(`/api/stock-reconciliation/recent?limit=${limit}`),
+  
+  updateReconciliationStatus: (data) => 
+    apiFetch('/api/stock-reconciliation/update-status', { method: 'POST', body: data }),
 
   // Audit
   auditLog: (params = '') => apiFetch(`/api/audit${params}`),

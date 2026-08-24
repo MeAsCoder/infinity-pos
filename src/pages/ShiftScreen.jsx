@@ -1,5 +1,5 @@
-// ShiftScreen.jsx - Updated with cash counting fields
-import React, { useEffect, useState } from 'react';
+// ShiftScreen.jsx - Fully updated with real selling units from API
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, enqueue } from '../db/offlineDb';
@@ -128,15 +128,24 @@ export default function ShiftScreen() {
         <IconArrowLeft className="w-4 h-4" /> Back to POS
       </button>
       
-      <EndShiftForm 
-        shift={shift} 
-        report={report} 
-        online={online} 
-        user={user}
-        onClosed={(r) => handleClosed(r, shift.id)} 
-        onManageTabs={() => navigate('/pos', { state: { view: 'tabs' } })} 
-        onRefresh={loadShift}
-      />
+      {report && !report.stocktake ? (
+        <StockCountGate
+          shift={shift}
+          onSubmitted={(result) => {
+            setReport(r => ({ ...(r || {}), stocktake: { id: result.stocktakeId || 'pending', ...result } }));
+          }}
+        />
+      ) : (
+        <EndShiftForm 
+          shift={shift} 
+          report={report} 
+          online={online} 
+          user={user}
+          onClosed={(r) => handleClosed(r, shift.id)} 
+          onManageTabs={() => navigate('/pos', { state: { view: 'tabs' } })} 
+          onRefresh={loadShift}
+        />
+      )}
     </div>
   );
 }
@@ -230,6 +239,374 @@ function StartShiftForm({ deviceId, onStarted }) {
 }
 
 // ============================================================================
+// STOCK COUNT GATE - WITH REAL SELLING UNITS FROM API
+// ============================================================================
+function StockCountGate({ shift, onSubmitted }) {
+  const allProducts = useLiveQuery(() => db.products.toArray(), [], null);
+  const [search, setSearch] = useState('');
+  const [counts, setCounts] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [submittedResult, setSubmittedResult] = useState(null);
+
+  useEffect(() => {
+    if (navigator.onLine) {
+      api.products('?active=1')
+        .then(fresh => db.products.bulkPut(fresh))
+        .catch(() => {});
+    }
+  }, []);
+
+  const trackedProducts = useMemo(() => (allProducts || []).filter(p => p.trackInventory), [allProducts]);
+
+  // ============================================================================
+  // FIXED: Use the product's ACTUAL selling units from the server,
+  // not a guess based on volume_ml. product.sellingUnits comes straight
+  // from the products API.
+  // ============================================================================
+  const getAvailableUnits = (product) => {
+    return (product.sellingUnits || [])
+      .filter(u => u.active !== false)
+      .sort((a, b) => b.volumeMl - a.volumeMl)
+      .map(u => ({ 
+        id: u.id,           // Use the real selling_unit_id
+        label: u.name,      // Use the real unit name
+        ml: u.volumeMl,     // Use the real volume
+        sortOrder: u.sortOrder || 0
+      }));
+  };
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return trackedProducts;
+    return trackedProducts.filter(p => p.name.toLowerCase().includes(q) || (p.brand || '').toLowerCase().includes(q));
+  }, [trackedProducts, search]);
+
+  // Count a product as counted if ANY unit type has been touched
+  const countedCount = trackedProducts.filter(p => {
+    const units = getAvailableUnits(p);
+    return units.some(unit => {
+      const key = `${p.id}-${unit.id}`;
+      const count = counts[key];
+      return count !== undefined && count !== '';
+    });
+  }).length;
+  
+  const allCounted = trackedProducts.length === 0 || countedCount === trackedProducts.length;
+
+  // Get count for a specific unit type
+  const getUnitCount = (productId, unitId) => {
+    const key = `${productId}-${unitId}`;
+    return counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : 0;
+  };
+
+  // Get total ml for a product
+  const getTotalMl = (product) => {
+    const units = getAvailableUnits(product);
+    let total = 0;
+    units.forEach(unit => {
+      const count = getUnitCount(product.id, unit.id);
+      total += count * unit.ml;
+    });
+    return total;
+  };
+
+  // Check if any unit for this product has been counted
+  const isProductCounted = (product) => {
+    const units = getAvailableUnits(product);
+    return units.some(unit => {
+      const key = `${product.id}-${unit.id}`;
+      const count = counts[key];
+      return count !== undefined && count !== '';
+    });
+  };
+
+  async function submit() {
+    if (!allCounted) {
+      setErr(`Please count all products (${countedCount}/${trackedProducts.length} done).`);
+      return;
+    }
+    setErr('');
+    setBusy(true);
+
+    // Build items with proper unit information using real selling_unit_id
+    const items = trackedProducts.map(p => {
+      const units = getAvailableUnits(p);
+      const unitCounts = units.map(unit => {
+        const key = `${p.id}-${unit.id}`;
+        const count = counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : 0;
+        return { 
+          sellingUnitId: unit.id,  // Use the real selling_unit_id
+          count: count 
+        };
+      });
+      return { 
+        productId: p.id, 
+        productName: p.name, 
+        unitCounts  // Server will compute physicalStockMl from this
+      };
+    });
+
+    const payload = { 
+      items,
+      shiftId: shift.id 
+    };
+
+    try {
+      if (navigator.onLine) {
+        const result = await apiFetch(`/api/shifts/${shift.id}/stocktake`, { 
+          method: 'POST', 
+          body: payload 
+        });
+        setSubmittedResult(result);
+      } else {
+        await enqueue('STOCK_COUNT_SUBMIT', crypto.randomUUID(), payload);
+        setSubmittedResult({ pendingSync: true });
+      }
+    } catch (e) {
+      setErr(e.data?.error || e.message || 'Failed to submit stock count');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (submittedResult) {
+    return (
+      <div className="bg-white rounded-2xl shadow-card p-6 sm:p-7 text-center">
+        <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center mb-4 ${
+          submittedResult.pendingSync || submittedResult.flagged ? 'bg-amber-100' : 'bg-emerald-100'
+        }`}>
+          {submittedResult.pendingSync || submittedResult.flagged ?
+            <IconAlert className="w-6 h-6 text-amber-600" /> :
+            <IconCheck className="w-6 h-6 text-emerald-600" />}
+        </div>
+        <h2 className="font-display text-xl font-semibold text-ink-950 mb-2">Stock Count Submitted</h2>
+        {submittedResult.pendingSync ? (
+          <p className="text-neutral-500 text-sm">Saved offline — will sync and be reviewed once this device is back online.</p>
+        ) : (
+          <>
+            <p className="text-sm text-neutral-500 mb-3">
+              {submittedResult.itemCount} product(s) counted.
+              {submittedResult.flagged
+                ? ' A few differences were large enough to flag for admin review.'
+                : ' No significant differences found.'}
+            </p>
+            {submittedResult.topDiscrepancies?.length > 0 && (
+              <div className="text-left bg-neutral-50 rounded-xl p-4 space-y-1.5 text-sm">
+                <p className="text-xs text-neutral-400 uppercase tracking-wide font-semibold mb-1">Largest differences</p>
+                {submittedResult.topDiscrepancies.map((d, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-neutral-600 truncate">{d.product_name}</span>
+                    <span className={`font-medium ${d.difference_ml < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {d.difference_ml > 0 ? '+' : ''}{d.difference_ml}ml
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        <button
+          onClick={() => onSubmitted(submittedResult)}
+          className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl mt-6 transition"
+        >
+          Continue to Close Shift
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-card p-6 sm:p-7">
+      <div className="mb-4">
+        <h2 className="font-display text-2xl font-semibold text-ink-950 flex items-center gap-2">
+          <IconReceipt className="w-5 h-5" /> Count Stock
+        </h2>
+        <p className="text-sm text-neutral-500 mt-1">
+          Count what's physically on the shelf. Each unit type is counted separately.
+          <br />
+          <span className="text-xs text-amber-600">
+            💡 Enter 0 if the item is out of stock — it will still count as counted.
+          </span>
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 mb-3">
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search product…"
+          className="flex-1 border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+        />
+        <span className="text-sm font-medium text-neutral-500 whitespace-nowrap">
+          {countedCount}/{trackedProducts.length} counted
+        </span>
+      </div>
+
+      {err && (
+        <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-3 border border-rose-100">
+          {err}
+        </div>
+      )}
+
+      <div className="border border-neutral-200 rounded-xl divide-y divide-neutral-100 max-h-[50vh] overflow-y-auto mb-4">
+        {filtered.map(p => {
+          const availableUnits = getAvailableUnits(p);
+          const totalMl = getTotalMl(p);
+          const productCounted = isProductCounted(p);
+          
+          return (
+            <div key={p.id} className={`px-4 py-3 ${productCounted ? 'bg-green-50/30' : ''}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div>
+                  <div className="text-sm font-medium text-ink-950">{p.name}</div>
+                  <div className="text-xs text-neutral-400">
+                    {p.volumeMl}ml {p.volumeMl === 1 ? 'per piece' : 'bottle'}
+                  </div>
+                </div>
+                <div className="text-sm font-semibold text-brand">
+                  {productCounted ? (
+                    totalMl > 0 ? `${totalMl}ml total` : '✅ 0 (Out of Stock)'
+                  ) : (
+                    'Not counted'
+                  )}
+                </div>
+              </div>
+              
+              {/* Unit type input rows - using real selling_unit_id */}
+              <div className="space-y-1.5">
+                {availableUnits.map((unit) => {
+                  const key = `${p.id}-${unit.id}`;
+                  const count = counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : '';
+                  const unitTotalMl = count !== '' ? count * unit.ml : 0;
+                  const isCounted = counts[key] !== undefined && counts[key] !== '';
+                  
+                  return (
+                    <div key={unit.id} className="flex items-center gap-2 pl-2">
+                      <div className={`w-24 text-xs ${isCounted ? 'text-neutral-700' : 'text-neutral-500'}`}>
+                        {unit.label}:
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={count}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '' || Number(val) >= 0) {
+                            setCounts(c => ({ ...c, [key]: val }));
+                          }
+                        }}
+                        placeholder="0"
+                        className={`w-16 border border-neutral-200 rounded-lg px-2 py-1 text-right focus:border-brand focus:ring-1 focus:ring-brand outline-none transition ${
+                          isCounted ? 'bg-green-50 border-green-300' : ''
+                        }`}
+                      />
+                      <span className="text-[10px] text-neutral-400">
+                        × {unit.ml}ml = {unitTotalMl}ml
+                      </span>
+                      {/* Quick add buttons */}
+                      <div className="flex gap-0.5 ml-1">
+                        <button
+                          onClick={() => {
+                            const current = counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : 0;
+                            setCounts(c => ({ ...c, [key]: String(current + 1) }));
+                          }}
+                          className="text-[10px] bg-neutral-100 hover:bg-neutral-200 px-1.5 py-0.5 rounded"
+                        >
+                          +1
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCounts(c => ({ ...c, [key]: '0' }));
+                          }}
+                          className="text-[10px] bg-neutral-100 hover:bg-neutral-200 px-1.5 py-0.5 rounded text-neutral-500"
+                        >
+                          0
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Quick preset buttons - generically built from available units */}
+              {availableUnits.length > 1 && (
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] text-neutral-400">Quick:</span>
+                  {availableUnits.map((unit, idx) => {
+                    // Create quick buttons for common presets
+                    if (unit.label.toLowerCase().includes('half')) {
+                      return (
+                        <button
+                          key={`half-${unit.id}`}
+                          onClick={() => {
+                            setCounts(c => ({ ...c, [`${p.id}-${unit.id}`]: '1' }));
+                          }}
+                          className="text-[10px] bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded transition"
+                        >
+                          1 {unit.label}
+                        </button>
+                      );
+                    }
+                    if (unit.label.toLowerCase().includes('tot')) {
+                      return (
+                        <button
+                          key={`tot-${unit.id}`}
+                          onClick={() => {
+                            setCounts(c => ({ ...c, [`${p.id}-${unit.id}`]: '20' }));
+                          }}
+                          className="text-[10px] bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded transition"
+                        >
+                          20 {unit.label}s
+                        </button>
+                      );
+                    }
+                    return null;
+                  })}
+                  <button
+                    onClick={() => {
+                      // Set all units to 0 (out of stock)
+                      const newCounts = {};
+                      availableUnits.forEach(u => {
+                        newCounts[`${p.id}-${u.id}`] = '0';
+                      });
+                      setCounts(c => ({ ...c, ...newCounts }));
+                    }}
+                    className="text-[10px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-0.5 rounded transition"
+                  >
+                    Out of Stock
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div className="p-6 text-center text-neutral-400 text-sm">No matching products.</div>
+        )}
+        {trackedProducts.length === 0 && (
+          <div className="p-6 text-center text-neutral-400 text-sm">No tracked-inventory products to count.</div>
+        )}
+      </div>
+
+      <button
+        disabled={busy || !allCounted}
+        onClick={submit}
+        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-40 transition shadow-soft"
+      >
+        {busy ? 'Submitting…' : allCounted ? 'Submit Stock Count' : `Count all products to continue (${countedCount}/${trackedProducts.length})`}
+      </button>
+      {!navigator.onLine && (
+        <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 mt-3 text-center">
+          Offline — this will sync automatically once you're back online.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // END SHIFT FORM - WITH CASH COUNTING FIELDS
 // ============================================================================
 function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onRefresh }) {
@@ -244,7 +621,6 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
   const [showPatternModal, setShowPatternModal] = useState(false);
   const [patterns, setPatterns] = useState([]);
   
-  // Debt/Unsettled bill state
   const [showDebtModal, setShowDebtModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState(null);
   const [debtCustomer, setDebtCustomer] = useState({
@@ -267,7 +643,6 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
     }
   }
 
-  // Handle recording a tab as debt
   async function recordAsDebt() {
     if (!debtCustomer.name.trim()) {
       setErr('Customer name is required');
@@ -304,10 +679,7 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         await enqueue('RECORD_DEBT', crypto.randomUUID(), { ...payload, saleId });
       }
 
-      // Remove the tab from open tabs
       await db.openTabs.where('localId').equals(saleId).delete();
-      
-      // Refresh the open tabs list
       await refreshData();
       
       setDebtSuccess(`Debt of ${money(selectedTab.total)} recorded for ${debtCustomer.name}`);
@@ -327,28 +699,23 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
     }
   }
 
-  // Close shift
   async function submit() {
     setErr('');
     setOpenTabsBlocking(null);
     
-    // Check if there are open tabs blocking
     if (openTabsBlocking && openTabsBlocking.length > 0) {
       setErr('Please settle or record all open tabs as debt before closing.');
       return;
     }
     
-    // Validate cash count - required!
     if (actualCash === '') {
       setErr('Please count and enter the physical cash in the drawer.');
       return;
     }
     
-    // Close shift
     await closeShift();
   }
 
-  // Close the shift
   async function closeShift() {
     setBusy(true);
     const payload = { 
@@ -395,7 +762,6 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
     }
   }
 
-  // Fetch open tabs when the component mounts or when shift changes
   useEffect(() => {
     async function fetchOpenTabs() {
       if (!shift?.id) return;
@@ -434,7 +800,6 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         </button>
       </div>
 
-      {/* Open Bills/Tabs Warning */}
       {openTabsBlocking && openTabsBlocking.length > 0 && (
         <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 mb-5">
           <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-2">
@@ -488,7 +853,6 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         </div>
       )}
 
-      {/* Shift Statistics */}
       {totals && (
         <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
           <Stat label="Transactions" value={totals.count} />
@@ -505,7 +869,6 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         </div>
       )}
 
-      {/* Cash Counting Section - BLIND COUNT (no expected cash shown yet) */}
       <div className="space-y-4 mb-5">
         <div className="border-b border-neutral-200 pb-2">
           <h3 className="font-semibold text-ink-950 flex items-center gap-2">
@@ -602,7 +965,6 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         </p>
       )}
 
-      {/* Debt Recording Modal */}
       {showDebtModal && selectedTab && (
         <DebtModal
           tab={selectedTab}
@@ -626,15 +988,7 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
 }
 
 // ============================================================================
-// DEBT MODAL - now with an existing-customer search/picker, same pattern as
-// POS.jsx's SettleModal, so a waiter doesn't have to retype a name/phone that
-// might not exactly match an existing record (which would silently create a
-// duplicate customer instead of adding to their real outstanding balance).
-// Unlike POS.jsx, this does NOT pre-create the customer via a separate API
-// call — it only fills in name/phone from the picker. /api/sales/:id/debt
-// already looks up-or-creates by phone/name server-side, and keeping it that
-// way preserves this screen's offline support (recordAsDebt can enqueue to
-// the outbox when offline; an upfront customer-creation call could not).
+// DEBT MODAL
 // ============================================================================
 function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error, success }) {
   const [customerSearch, setCustomerSearch] = useState('');
@@ -649,8 +1003,6 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
     }
   }, []);
 
-  // If the currently-filled name/phone matches a known customer, surface
-  // their existing balance so the waiter can see they may already owe money.
   const matchedExisting = (existingCustomers || []).find(c =>
     (customer.phone && c.phone === customer.phone) ||
     (!customer.phone && customer.name && c.name === customer.name)

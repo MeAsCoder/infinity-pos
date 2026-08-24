@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../api/client';
 import { IconPlus, IconClose } from '../components/Icons';
 
@@ -10,62 +10,223 @@ export default function Products() {
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
 
   useEffect(() => { load(); }, [search]);
+
   async function load() {
     setLoading(true);
-    try { setProducts(await api.products(`?active=1${search ? `&search=${encodeURIComponent(search)}` : ''}`)); }
-    finally { setLoading(false); }
+    try {
+      const data = await api.products(`?active=1${search ? `&search=${encodeURIComponent(search)}` : ''}`);
+      setProducts(data);
+    } finally { 
+      setLoading(false); 
+    }
   }
 
-  // Refresh just one row in place (used after a price save) without losing scroll position.
   async function refreshOne(id) {
     const fresh = await api.product(id);
     setProducts(list => list.map(p => p.id === id ? fresh : p));
     return fresh;
   }
 
+  const categories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category).filter(Boolean));
+    return ['all', ...Array.from(cats)];
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    let result = products;
+    if (filterCategory !== 'all') {
+      result = result.filter(p => p.category === filterCategory);
+    }
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case 'name': return a.name.localeCompare(b.name);
+        case 'price': return (a.sellingUnits[0]?.price || 0) - (b.sellingUnits[0]?.price || 0);
+        case 'stock': return (a.stockDisplay || 0) - (b.stockDisplay || 0);
+        case 'category': return (a.category || '').localeCompare(b.category || '');
+        default: return 0;
+      }
+    });
+    return result;
+  }, [products, filterCategory, sortBy]);
+
   const selected = products.find(p => p.id === selectedId) || null;
 
+  const stats = {
+    total: products.length,
+    lowStock: products.filter(p => p.lowStock).length,
+    outOfStock: products.filter(p => p.stockDisplay === 0).length,
+    serving: products.filter(p => p.allowServing).length,
+  };
+
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-ink-950">Products</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">{products.length} active items in the catalogue</p>
+          <h1 className="text-2xl font-bold text-ink-950">Products</h1>
+          <div className="flex flex-wrap gap-4 mt-1 text-sm text-neutral-500">
+            <span>{stats.total} total</span>
+            <span>· {stats.total - stats.lowStock - stats.outOfStock} in stock</span>
+            {stats.lowStock > 0 && <span className="text-amber-600">· {stats.lowStock} low</span>}
+            {stats.outOfStock > 0 && <span className="text-rose-600">· {stats.outOfStock} out</span>}
+            <span>· {stats.serving} serving</span>
+          </div>
         </div>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-soft transition">
+        <button 
+          onClick={() => setShowNew(true)} 
+          className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition shadow-soft"
+        >
           <IconPlus className="w-4 h-4" /> New Product
         </button>
       </div>
 
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products…"
-        className="w-full border border-neutral-200 rounded-xl px-4 py-3 mb-5 bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" />
-
-      <div className="bg-white rounded-2xl shadow-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-neutral-400 border-b border-neutral-100 bg-neutral-50/60">
-              <th className="p-4 font-medium">Name</th><th className="p-4 font-medium">Category</th><th className="p-4 font-medium">Stock</th>
-              <th className="p-4 font-medium">Serving</th><th className="p-4 font-medium">Base Price</th><th className="p-4"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map(p => (
-              <tr key={p.id} className="border-t border-neutral-100 hover:bg-neutral-50/80 transition">
-                <td className="p-4 font-medium text-ink-950">{p.name}</td>
-                <td className="p-4 text-neutral-500">{p.category || '—'}</td>
-                <td className={`p-4 ${p.lowStock ? 'text-rose-600 font-medium' : 'text-neutral-600'}`}>{p.trackInventory ? p.stockDisplay : 'not tracked'}</td>
-                <td className="p-4">{p.allowServing ? <span className="text-emerald-600">✓</span> : <span className="text-neutral-300">—</span>}</td>
-                <td className="p-4 font-medium">{p.sellingUnits[0] ? money(p.sellingUnits[0].price) : '—'}</td>
-                <td className="p-4"><button onClick={() => setSelectedId(p.id)} className="text-brand font-semibold hover:underline">Edit</button></td>
-              </tr>
-            ))}
-            {!loading && products.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-neutral-400">No products found</td></tr>}
-          </tbody>
-        </table>
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-4 bg-white rounded-xl shadow-sm p-3 border border-neutral-100">
+        <div className="flex-1 min-w-[160px] relative">
+          <span className="text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2 text-sm">🔍</span>
+          <input 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+            placeholder="Search products..."
+            className="w-full border border-neutral-200 rounded-lg pl-9 pr-3 py-2 text-sm bg-neutral-50 focus:bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+          />
+        </div>
+        
+        <select
+          value={filterCategory}
+          onChange={e => setFilterCategory(e.target.value)}
+          className="border border-neutral-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+        >
+          {categories.map(cat => (
+            <option key={cat} value={cat}>
+              {cat === 'all' ? 'All Categories' : cat}
+            </option>
+          ))}
+        </select>
+        
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          className="border border-neutral-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+        >
+          <option value="name">Sort: Name</option>
+          <option value="price">Sort: Price</option>
+          <option value="stock">Sort: Stock</option>
+          <option value="category">Sort: Category</option>
+        </select>
+        
+        {(search || filterCategory !== 'all') && (
+          <button
+            onClick={() => { setSearch(''); setFilterCategory('all'); }}
+            className="text-sm text-neutral-400 hover:text-neutral-600 underline whitespace-nowrap"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
+      {/* Product Table */}
+      {loading ? (
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-8 text-center text-neutral-400 text-sm">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand mx-auto"></div>
+          <p className="mt-3">Loading products...</p>
+        </div>
+      ) : filteredProducts.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-12 text-center text-neutral-400 text-sm">
+          {search || filterCategory !== 'all' ? 'No products match your filters' : 'No products found'}
+          {(search || filterCategory !== 'all') && (
+            <button
+              onClick={() => { setSearch(''); setFilterCategory('all'); }}
+              className="block mt-2 text-brand text-sm font-medium hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-50 border-b border-neutral-200">
+                <tr className="text-left text-neutral-500 font-semibold text-xs uppercase tracking-wider">
+                  <th className="p-3">Product</th>
+                  <th className="p-3">Category</th>
+                  <th className="p-3 text-right">Price</th>
+                  <th className="p-3 text-right">Stock</th>
+                  <th className="p-3 text-center">Status</th>
+                  <th className="p-3 text-center">Serving</th>
+                  <th className="p-3 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {filteredProducts.map(p => {
+                  const unit = p.sellingUnits?.[0];
+                  const isOutOfStock = p.stockDisplay === 0;
+                  const isLowStock = p.lowStock && !isOutOfStock;
+                  
+                  let statusText = 'In Stock';
+                  let statusColor = 'bg-emerald-100 text-emerald-700';
+                  if (isOutOfStock) {
+                    statusText = 'Out of Stock';
+                    statusColor = 'bg-rose-100 text-rose-700';
+                  } else if (isLowStock) {
+                    statusText = 'Low Stock';
+                    statusColor = 'bg-amber-100 text-amber-700';
+                  }
+                  
+                  return (
+                    <tr 
+                      key={p.id} 
+                      className="hover:bg-neutral-50 transition cursor-pointer"
+                      onClick={() => setSelectedId(p.id)}
+                    >
+                      <td className="p-3">
+                        <div className="font-medium text-ink-950">{p.name}</div>
+                        <div className="text-xs text-neutral-400">{p.brand || '—'} · {p.volumeMl}ml</div>
+                      </td>
+                      <td className="p-3 text-neutral-500">{p.category || '—'}</td>
+                      <td className="p-3 text-right font-semibold text-ink-950">
+                        {unit ? money(unit.price) : '—'}
+                      </td>
+                      <td className="p-3 text-right">
+                        <span className={isOutOfStock ? 'text-rose-600' : isLowStock ? 'text-amber-600' : 'text-ink-950'}>
+                          {p.trackInventory ? p.stockDisplay || 0 : '—'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColor}`}>
+                          {statusText}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        {p.allowServing ? (
+                          <span className="text-emerald-600 font-semibold">✓</span>
+                        ) : (
+                          <span className="text-neutral-300">—</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-center">
+                        <button 
+                          className="text-brand hover:text-brand-dark font-semibold text-sm transition"
+                          onClick={(e) => { e.stopPropagation(); setSelectedId(p.id); }}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Product Drawer */}
       {selected && (
         <ProductDrawer
           product={selected}
@@ -74,14 +235,22 @@ export default function Products() {
           onDeactivated={() => { setSelectedId(null); load(); }}
         />
       )}
-      {showNew && <NewProductDrawer onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load(); }} />}
+      
+      {/* New Product Drawer */}
+      {showNew && (
+        <NewProductDrawer 
+          onClose={() => setShowNew(false)} 
+          onSaved={() => { setShowNew(false); load(); }} 
+        />
+      )}
     </div>
   );
 }
 
+// ============================================================================
+// PRODUCT DRAWER
+// ============================================================================
 function ProductDrawer({ product, onClose, onRefresh, onDeactivated }) {
-  // Keyed on product.id so switching products (or a refresh with new price data)
-  // re-syncs local input state instead of showing stale values.
   const [prices, setPrices] = useState({});
   const [savingUnit, setSavingUnit] = useState(null);
   const [savedUnit, setSavedUnit] = useState(null);
@@ -91,6 +260,7 @@ function ProductDrawer({ product, onClose, onRefresh, onDeactivated }) {
   const [busy, setBusy] = useState(false);
   const [newUnit, setNewUnit] = useState({ name: '', volumeMl: '', price: '', cost: '' });
   const [err, setErr] = useState('');
+  const [activeTab, setActiveTab] = useState('units');
 
   useEffect(() => {
     setPrices(Object.fromEntries(product.sellingUnits.map(u => [u.id, { price: u.price, cost: u.cost }])));
@@ -102,8 +272,11 @@ function ProductDrawer({ product, onClose, onRefresh, onDeactivated }) {
   async function savePrice(unitId) {
     setErr(''); setSavingUnit(unitId); setSavedUnit(null);
     try {
-      await api.setPrice(product.id, unitId, { sellingPrice: Number(prices[unitId].price), costPrice: Number(prices[unitId].cost) });
-      await onRefresh(); // pulls the freshly-saved price back so the UI reflects what's actually in the DB
+      await api.setPrice(product.id, unitId, { 
+        sellingPrice: Number(prices[unitId].price), 
+        costPrice: Number(prices[unitId].cost) 
+      });
+      await onRefresh();
       setSavedUnit(unitId);
       setTimeout(() => setSavedUnit(null), 2000);
     } catch (e) {
@@ -115,16 +288,27 @@ function ProductDrawer({ product, onClose, onRefresh, onDeactivated }) {
 
   async function saveMeta() {
     setBusy(true); setErr('');
-    try { await api.updateProduct(product.id, { allowServing, reorderLevel: Number(reorderLevel), active }); await onRefresh(); if (!active) onDeactivated(); }
-    catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    try { 
+      await api.updateProduct(product.id, { allowServing, reorderLevel: Number(reorderLevel), active }); 
+      await onRefresh(); 
+      if (!active) onDeactivated(); 
+    } catch (e) { 
+      setErr(e.message); 
+    } finally { 
+      setBusy(false); 
+    }
   }
 
   async function addUnit() {
     if (!newUnit.name || !newUnit.volumeMl) return;
     setBusy(true); setErr('');
     try {
-      await api.addUnit(product.id, { name: newUnit.name, volumeMl: Number(newUnit.volumeMl), price: Number(newUnit.price) || 0, cost: Number(newUnit.cost) || 0 });
+      await api.addUnit(product.id, { 
+        name: newUnit.name, 
+        volumeMl: Number(newUnit.volumeMl), 
+        price: Number(newUnit.price) || 0, 
+        cost: Number(newUnit.cost) || 0 
+      });
       setNewUnit({ name: '', volumeMl: '', price: '', cost: '' });
       await onRefresh();
     } catch (e) { setErr(e.message); }
@@ -132,71 +316,222 @@ function ProductDrawer({ product, onClose, onRefresh, onDeactivated }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex justify-end z-40" onClick={onClose}>
-      <div className="bg-white w-full sm:w-[460px] h-full overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-start mb-5">
-          <div>
-            <h2 className="font-display text-xl font-semibold text-ink-950">{product.name}</h2>
-            <p className="text-sm text-neutral-400 mt-0.5">{product.category} · {product.stockDisplay}</p>
+    <div className="fixed inset-0 bg-black/40 flex justify-end z-50" onClick={onClose}>
+      <div className="bg-white w-full sm:w-[460px] h-full overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="sticky top-0 bg-white z-10 border-b border-neutral-200 p-5">
+          <div className="flex justify-between items-start">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl font-semibold text-ink-950 truncate">{product.name}</h2>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-neutral-400 mt-1">
+                <span>{product.category || 'Uncategorized'}</span>
+                <span>•</span>
+                <span>{product.volumeMl}ml</span>
+                <span>•</span>
+                <span className={product.active ? 'text-emerald-600' : 'text-rose-600'}>
+                  {product.active ? 'Active' : 'Inactive'}
+                </span>
+                <span>•</span>
+                <span>Stock: {product.stockDisplay || 0}</span>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-1 ml-2 flex-shrink-0">
+              <IconClose className="w-5 h-5" />
+            </button>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-1"><IconClose className="w-5 h-5" /></button>
+          
+          {/* Tabs */}
+          <div className="flex gap-2 mt-4 bg-neutral-100 rounded-lg p-1">
+            <button
+              onClick={() => setActiveTab('units')}
+              className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition ${
+                activeTab === 'units' 
+                  ? 'bg-brand text-white' 
+                  : 'text-neutral-600 hover:text-neutral-800'
+              }`}
+            >
+              Units & Prices
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition ${
+                activeTab === 'settings' 
+                  ? 'bg-brand text-white' 
+                  : 'text-neutral-600 hover:text-neutral-800'
+              }`}
+            >
+              Settings
+            </button>
+          </div>
         </div>
 
-        {err && <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-4 border border-rose-100">{err}</div>}
+        {/* Body */}
+        <div className="p-5">
+          {err && (
+            <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-4 border border-rose-100">
+              {err}
+            </div>
+          )}
 
-        <h3 className="font-semibold text-xs uppercase tracking-wide mb-2.5 text-neutral-400">Selling Units &amp; Prices</h3>
-        <div className="space-y-2.5 mb-5">
-          {product.sellingUnits.map(u => (
-            <div key={u.id} className="border border-neutral-200 rounded-xl p-3.5">
-              <div className="flex justify-between items-center mb-2.5">
-                <span className="font-medium text-sm text-ink-950">{u.name} <span className="text-neutral-400 font-normal">({u.volumeMl}ml)</span></span>
-                {savedUnit === u.id && <span className="text-xs text-emerald-600 font-medium">Saved ✓</span>}
+          {activeTab === 'units' && (
+            <>
+              <div className="space-y-3 mb-5">
+                {product.sellingUnits.map(u => {
+                  const priceData = prices[u.id];
+                  return (
+                    <div key={u.id} className="border border-neutral-200 rounded-lg p-4 hover:border-brand/30 transition">
+                      <div className="flex justify-between items-center mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-ink-950">{u.name}</span>
+                          <span className="text-sm text-neutral-400">({u.volumeMl}ml)</span>
+                        </div>
+                        {savedUnit === u.id && (
+                          <span className="text-sm text-emerald-600 font-semibold flex items-center gap-1">
+                            ✓ Saved
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-neutral-500 font-medium">Price</label>
+                          <input 
+                            type="number" 
+                            value={priceData?.price ?? ''} 
+                            onChange={e => setPrices(p => ({ ...p, [u.id]: { ...p[u.id], price: e.target.value } }))}
+                            className="w-24 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-neutral-500 font-medium">Cost</label>
+                          <input 
+                            type="number" 
+                            value={priceData?.cost ?? ''} 
+                            onChange={e => setPrices(p => ({ ...p, [u.id]: { ...p[u.id], cost: e.target.value } }))}
+                            className="w-24 border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                          />
+                        </div>
+                        <button 
+                          disabled={savingUnit === u.id} 
+                          onClick={() => savePrice(u.id)} 
+                          className="ml-auto bg-brand hover:bg-brand-dark text-white px-4 py-1.5 rounded-lg text-sm font-semibold transition disabled:opacity-50"
+                        >
+                          {savingUnit === u.id ? 'Saving...' : 'Update'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div className="flex gap-2 items-center flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs text-neutral-400">Price</label>
-                  <input type="number" value={prices[u.id]?.price ?? ''} onChange={e => setPrices(p => ({ ...p, [u.id]: { ...p[u.id], price: e.target.value } }))}
-                    className="w-24 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:border-brand outline-none" />
+
+              <details className="border border-neutral-200 rounded-lg p-4">
+                <summary className="text-sm font-medium text-neutral-500 cursor-pointer hover:text-neutral-700 transition">
+                  + Add custom unit
+                </summary>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <input 
+                    placeholder="Name" 
+                    value={newUnit.name} 
+                    onChange={e => setNewUnit(n => ({ ...n, name: e.target.value }))} 
+                    className="border border-neutral-200 rounded-lg px-3 py-2 text-sm col-span-2 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  />
+                  <input 
+                    placeholder="Volume ml" 
+                    type="number" 
+                    value={newUnit.volumeMl} 
+                    onChange={e => setNewUnit(n => ({ ...n, volumeMl: e.target.value }))} 
+                    className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  />
+                  <input 
+                    placeholder="Price" 
+                    type="number" 
+                    value={newUnit.price} 
+                    onChange={e => setNewUnit(n => ({ ...n, price: e.target.value }))} 
+                    className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  />
+                  <input 
+                    placeholder="Cost" 
+                    type="number" 
+                    value={newUnit.cost} 
+                    onChange={e => setNewUnit(n => ({ ...n, cost: e.target.value }))} 
+                    className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  />
+                  <button 
+                    disabled={busy} 
+                    onClick={addUnit} 
+                    className="col-span-2 bg-neutral-100 hover:bg-neutral-200 rounded-lg px-3 py-2 font-medium text-sm transition disabled:opacity-50"
+                  >
+                    Add Unit
+                  </button>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs text-neutral-400">Cost</label>
-                  <input type="number" value={prices[u.id]?.cost ?? ''} onChange={e => setPrices(p => ({ ...p, [u.id]: { ...p[u.id], cost: e.target.value } }))}
-                    className="w-24 border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:border-brand outline-none" />
+              </details>
+            </>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-4">
+              <div className="bg-neutral-50 rounded-xl p-4 space-y-4">
+                <h4 className="text-sm font-semibold text-neutral-500 uppercase tracking-wider">Product Settings</h4>
+                
+                <label className="flex items-center gap-3 text-sm text-ink-950">
+                  <input 
+                    type="checkbox" 
+                    checked={allowServing} 
+                    onChange={e => setAllowServing(e.target.checked)} 
+                    className="w-4 h-4 accent-brand rounded" 
+                  />
+                  Allow serving sales (half/tot)
+                </label>
+                
+                <div className="flex items-center gap-3 text-sm text-ink-950">
+                  <span>Reorder level:</span>
+                  <input 
+                    type="number" 
+                    value={reorderLevel} 
+                    onChange={e => setReorderLevel(e.target.value)} 
+                    className="border border-neutral-200 rounded-lg px-2.5 py-1.5 w-20 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  />
+                  <span className="text-sm text-neutral-400">units</span>
                 </div>
-                <button disabled={savingUnit === u.id} onClick={() => savePrice(u.id)} className="ml-auto text-brand text-sm font-semibold disabled:opacity-50">
-                  {savingUnit === u.id ? 'Saving…' : 'Save'}
+                
+                <label className="flex items-center gap-3 text-sm text-ink-950">
+                  <input 
+                    type="checkbox" 
+                    checked={active} 
+                    onChange={e => setActive(e.target.checked)} 
+                    className="w-4 h-4 accent-brand rounded" 
+                  />
+                  Active
+                </label>
+
+                <button 
+                  disabled={busy} 
+                  onClick={saveMeta} 
+                  className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 rounded-xl text-sm transition disabled:opacity-50"
+                >
+                  {busy ? 'Saving...' : 'Save Settings'}
                 </button>
               </div>
             </div>
-          ))}
+          )}
         </div>
-
-        <details className="mb-5">
-          <summary className="text-xs font-semibold uppercase tracking-wide text-neutral-400 cursor-pointer">+ Add a selling unit (custom serving)</summary>
-          <div className="grid grid-cols-2 gap-2 mt-3">
-            <input placeholder="Name (e.g. Double Tot)" value={newUnit.name} onChange={e => setNewUnit(n => ({ ...n, name: e.target.value }))} className="border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm col-span-2" />
-            <input placeholder="Volume ml" type="number" value={newUnit.volumeMl} onChange={e => setNewUnit(n => ({ ...n, volumeMl: e.target.value }))} className="border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm" />
-            <input placeholder="Price" type="number" value={newUnit.price} onChange={e => setNewUnit(n => ({ ...n, price: e.target.value }))} className="border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm" />
-            <input placeholder="Cost" type="number" value={newUnit.cost} onChange={e => setNewUnit(n => ({ ...n, cost: e.target.value }))} className="border border-neutral-200 rounded-lg px-2.5 py-1.5 text-sm" />
-            <button disabled={busy} onClick={addUnit} className="bg-neutral-100 hover:bg-neutral-200 rounded-lg px-2.5 py-1.5 font-medium text-sm transition">Add</button>
-          </div>
-        </details>
-
-        <h3 className="font-semibold text-xs uppercase tracking-wide mb-2.5 text-neutral-400">Settings</h3>
-        <label className="flex items-center gap-2.5 mb-2.5 text-sm text-ink-950"><input type="checkbox" checked={allowServing} onChange={e => setAllowServing(e.target.checked)} className="w-4 h-4 accent-brand" /> Allow serving sales (half/tot)</label>
-        <label className="flex items-center gap-2.5 mb-2.5 text-sm text-ink-950">Reorder level (units): <input type="number" value={reorderLevel} onChange={e => setReorderLevel(e.target.value)} className="border border-neutral-200 rounded-lg px-2 py-1 w-20 text-sm" /></label>
-        <label className="flex items-center gap-2.5 mb-5 text-sm text-ink-950"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="w-4 h-4 accent-brand" /> Active</label>
-
-        <button disabled={busy} onClick={saveMeta} className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3 rounded-xl transition disabled:opacity-50">
-          {busy ? 'Saving…' : 'Save Settings'}
-        </button>
       </div>
     </div>
   );
 }
 
+// ============================================================================
+// NEW PRODUCT DRAWER
+// ============================================================================
 function NewProductDrawer({ onClose, onSaved }) {
-  const [form, setForm] = useState({ name: '', brand: '', category: '', volumeMl: 750, allowServing: false, price: '', cost: '' });
+  const [form, setForm] = useState({ 
+    name: '', 
+    brand: '', 
+    category: '', 
+    volumeMl: 750, 
+    allowServing: false, 
+    price: '', 
+    cost: '' 
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -205,40 +540,149 @@ function NewProductDrawer({ onClose, onSaved }) {
     setBusy(true); setErr('');
     try {
       await api.createProduct({
-        name: form.name, brand: form.brand, category: form.category, volumeMl: Number(form.volumeMl) || 1,
+        name: form.name,
+        brand: form.brand || undefined,
+        category: form.category || undefined,
+        volumeMl: Number(form.volumeMl) || 1,
         allowServing: form.allowServing,
-        sellingUnits: [{ name: form.volumeMl > 1 ? 'Bottle' : 'Piece', volumeMl: Number(form.volumeMl) || 1, price: Number(form.price) || 0, cost: Number(form.cost) || 0 }],
+        sellingUnits: [{
+          name: Number(form.volumeMl) > 1 ? 'Bottle' : 'Piece',
+          volumeMl: Number(form.volumeMl) || 1,
+          price: Number(form.price) || 0,
+          cost: Number(form.cost) || 0
+        }],
       });
       onSaved();
-    } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+    } catch (e) { 
+      setErr(e.message); 
+    } finally { 
+      setBusy(false); 
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex justify-end z-40" onClick={onClose}>
-      <div className="bg-white w-full sm:w-96 h-full overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 flex justify-end z-50" onClick={onClose}>
+      <div className="bg-white w-full sm:w-[440px] h-full overflow-y-auto shadow-xl p-6" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-start mb-5">
-          <h2 className="font-display text-xl font-semibold text-ink-950">New Product</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-1"><IconClose className="w-5 h-5" /></button>
-        </div>
-        {err && <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-4 border border-rose-100">{err}</div>}
-        <div className="space-y-3">
-          <input placeholder="Name" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm" />
-          <input placeholder="Brand" value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} className="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm" />
-          <input placeholder="Category" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm" />
-          <div className="grid grid-cols-2 gap-2">
-            <input placeholder="Volume ml (1 = piece)" type="number" value={form.volumeMl} onChange={e => setForm(f => ({ ...f, volumeMl: e.target.value }))} className="border border-neutral-200 rounded-lg px-3 py-2.5 text-sm" />
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.allowServing} onChange={e => setForm(f => ({ ...f, allowServing: e.target.checked }))} className="accent-brand" /> Servings</label>
+          <div>
+            <h2 className="text-xl font-semibold text-ink-950">New Product</h2>
+            <p className="text-sm text-neutral-400 mt-0.5">Add a product to the catalogue</p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <input placeholder="Base price" type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} className="border border-neutral-200 rounded-lg px-3 py-2.5 text-sm" />
-            <input placeholder="Base cost" type="number" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} className="border border-neutral-200 rounded-lg px-3 py-2.5 text-sm" />
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-1">
+            <IconClose className="w-5 h-5" />
+          </button>
+        </div>
+
+        {err && (
+          <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-4 border border-rose-100">
+            {err}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-1.5 block">
+              Product Name <span className="text-rose-500">*</span>
+            </label>
+            <input 
+              placeholder="e.g. KC Ginger" 
+              value={form.name} 
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} 
+              className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+              autoFocus
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                Brand
+              </label>
+              <input 
+                placeholder="e.g. Chrome" 
+                value={form.brand} 
+                onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} 
+                className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                Category
+              </label>
+              <input 
+                placeholder="e.g. Spirit" 
+                value={form.category} 
+                onChange={e => setForm(f => ({ ...f, category: e.target.value }))} 
+                className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                Volume (ml)
+              </label>
+              <input 
+                type="number" 
+                placeholder="750" 
+                value={form.volumeMl} 
+                onChange={e => setForm(f => ({ ...f, volumeMl: e.target.value }))} 
+                className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+              />
+              <p className="text-xs text-neutral-400 mt-1">Use 1 for per-piece items</p>
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2.5 text-sm text-ink-950">
+                <input 
+                  type="checkbox" 
+                  checked={form.allowServing} 
+                  onChange={e => setForm(f => ({ ...f, allowServing: e.target.checked }))} 
+                  className="w-4 h-4 accent-brand rounded" 
+                />
+                Allow servings
+              </label>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                Base Price (KES)
+              </label>
+              <input 
+                type="number" 
+                placeholder="0" 
+                value={form.price} 
+                onChange={e => setForm(f => ({ ...f, price: e.target.value }))} 
+                className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                Base Cost (KES)
+              </label>
+              <input 
+                type="number" 
+                placeholder="0" 
+                value={form.cost} 
+                onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} 
+                className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+              />
+            </div>
           </div>
         </div>
-        <button disabled={busy} onClick={save} className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3 rounded-xl mt-5 transition disabled:opacity-50">
-          {busy ? 'Creating…' : 'Create Product'}
+
+        <button 
+          disabled={busy || !form.name} 
+          onClick={save} 
+          className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl text-base mt-6 transition disabled:opacity-50 shadow-card"
+        >
+          {busy ? 'Creating...' : 'Create Product'}
         </button>
-        <p className="text-xs text-neutral-400 mt-2">You can add Half/Tot serving units and adjust stock afterward.</p>
+        <p className="text-sm text-neutral-400 text-center mt-2">
+          You can add Half/Tot serving units and adjust stock after creation.
+        </p>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-// POS.jsx
+// POS.jsx - UPDATED UnitPicker with correct logic
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -478,48 +478,115 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
 }
 
 // ============================================================================
-// UNIT PICKER - Updated with logic based on bottle size
+// UNIT PICKER - CORRECTED LOGIC
+// For 250ml: Only Bottle and Half (NO Tot)
+// For 750ml: Only Bottle and Tot (NO Half)
 // ============================================================================
 function UnitPicker({ product, onPick, onClose }) {
+  const volume = product.volumeMl || 0;
+  const stockMl = product.stockMl || 0;
+
+  // Get stock display text with units
+  const getStockDisplay = () => {
+    if (!product.trackInventory) return 'Not stock-tracked';
+    if (stockMl <= 0) return 'Out of stock';
+    
+    if (volume === 250) {
+      const bottles = Math.floor(stockMl / 250);
+      const remainder = stockMl % 250;
+      if (remainder === 125) {
+        return `${bottles} bottle${bottles !== 1 ? 's' : ''} + ½ bottle`;
+      }
+      return `${bottles} bottle${bottles !== 1 ? 's' : ''}`;
+    }
+    
+    if (volume === 750) {
+      const bottles = Math.floor(stockMl / 750);
+      const remainder = stockMl % 750;
+      if (remainder > 0) {
+        const tots = Math.floor(remainder / 30);
+        return `${bottles} bottle${bottles !== 1 ? 's' : ''} + ${tots} tot${tots !== 1 ? 's' : ''}`;
+      }
+      return `${bottles} bottle${bottles !== 1 ? 's' : ''}`;
+    }
+    
+    return product.stockDisplay || `${stockMl}ml`;
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-40" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-96 p-5" onClick={e => e.stopPropagation()}>
         <div className="font-display font-semibold text-lg mb-1 text-ink-950">{product.name}</div>
         <div className="text-xs text-neutral-400 mb-4">
-          {product.trackInventory ? product.stockDisplay : 'Not stock-tracked'}
+          {getStockDisplay()}
         </div>
         <div className="space-y-2">
           {product.sellingUnits
             .filter(u => u.active)
             .filter(unit => {
-              // FILTER LOGIC:
-              // For 250ml bottles: show only "Bottle" and "Half" (NO Tot)
-              // For 750ml bottles: show only "Bottle" and "Tot" (NO Half)
-              // For all other sizes: show all available units
-              const volume = product.volumeMl || 0;
-              
+              // ============================================================
+              // CORRECTED FILTER LOGIC:
+              // 250ml: Only "Bottle" and "Half" (NO Tot)
+              // 750ml: Only "Bottle" and "Tot" (NO Half)
+              // Other sizes: Show all units
+              // ============================================================
               if (volume === 250) {
-                // 250ml bottle: only Bottle and Half
+                // 250ml: only Bottle and Half
                 return unit.name === 'Bottle' || unit.name === 'Half';
               } else if (volume === 750) {
-                // 750ml bottle: only Bottle and Tot
+                // 750ml: only Bottle and Tot
                 return unit.name === 'Bottle' || unit.name === 'Tot';
               }
-              // For other volumes (350ml, 500ml, 1000ml, etc.) show all units
+              // Other volumes: show all units
               return true;
             })
-            .map(u => (
-              <button 
-                key={u.id} 
-                onClick={() => onPick(u)}
-                className="w-full flex justify-between items-center border border-neutral-200 rounded-xl px-4 py-3.5 hover:border-brand hover:bg-brand-50 transition"
-              >
-                <span className="font-medium text-ink-950">
-                  {u.name} <span className="text-neutral-400 text-xs">({u.volumeMl}ml)</span>
-                </span>
-                <span className="font-bold text-brand">{money(u.price)}</span>
-              </button>
-            ))}
+            .map(u => {
+              // Check if this unit can be sold based on available stock
+              let isAvailable = true;
+              if (product.trackInventory) {
+                if (stockMl < u.volumeMl) {
+                  isAvailable = false;
+                }
+              }
+              
+              return (
+                <button 
+                  key={u.id} 
+                  onClick={() => isAvailable && onPick(u)}
+                  className={`w-full flex justify-between items-center border rounded-xl px-4 py-3.5 transition ${
+                    isAvailable 
+                      ? 'border-neutral-200 hover:border-brand hover:bg-brand-50' 
+                      : 'border-neutral-200 bg-neutral-50 opacity-50 cursor-not-allowed'
+                  }`}
+                  disabled={!isAvailable}
+                >
+                  <span className="font-medium text-ink-950">
+                    {u.name} <span className="text-neutral-400 text-xs">({u.volumeMl}ml)</span>
+                    {!isAvailable && (
+                      <span className="text-xs text-rose-500 ml-2">(out of stock)</span>
+                    )}
+                  </span>
+                  <span className="font-bold text-brand">{money(u.price)}</span>
+                </button>
+              );
+            })}
+          
+          {/* Check if any units are available */}
+          {product.sellingUnits
+            .filter(u => u.active)
+            .filter(unit => {
+              if (volume === 250) {
+                return unit.name === 'Bottle' || unit.name === 'Half';
+              } else if (volume === 750) {
+                return unit.name === 'Bottle' || unit.name === 'Tot';
+              }
+              return true;
+            })
+            .every(u => product.trackInventory && stockMl < u.volumeMl) && (
+            <div className="text-center py-6 text-neutral-400 text-sm">
+              {stockMl <= 0 ? 'This product is out of stock' : 'No available units for sale'}
+            </div>
+          )}
         </div>
         <button onClick={onClose} className="w-full mt-4 text-neutral-500 py-2 font-medium">
           Cancel

@@ -1,10 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { api, apiFetch } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import {
+  TrendingUp,
+  Package,
+  Users,
+  Wallet,
+  Boxes,
+  Calendar,
+  ChevronDown,
+  AlertTriangle,
+  XCircle,
+  CheckCircle2,
+  Inbox,
+} from 'lucide-react';
 
 function money(n) { return `KES ${Number(n || 0).toLocaleString()}`; }
 
-const TABS = ['Sales', 'Products', 'Waiters', 'Profit', 'Stock'];
+const TABS = [
+  { key: 'Sales', label: 'Sales', icon: TrendingUp },
+  { key: 'Products', label: 'Products', icon: Package },
+  { key: 'Waiters', label: 'Waiters', icon: Users },
+  { key: 'Profit', label: 'Profit', icon: Wallet },
+  { key: 'Stock', label: 'Stock', icon: Boxes },
+];
 
 export default function Reports() {
   const [tab, setTab] = useState('Sales');
@@ -21,91 +40,166 @@ export default function Reports() {
     setEndDate(today.toISOString().split('T')[0]);
   }, []);
 
-  return (
-    <div className="p-4 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-        <h1 className="text-2xl font-bold">Reports</h1>
-        
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={dateRange}
-            onChange={(e) => {
-              setDateRange(e.target.value);
-              if (e.target.value === 'custom') {
-                setShowDatePicker(true);
-              } else {
-                setShowDatePicker(false);
-              }
-            }}
-            className="border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition bg-white"
-          >
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
-            <option value="custom">Custom Range</option>
-          </select>
+  const getDateRangeLabel = () => {
+    const labels = {
+      today: 'Today',
+      yesterday: 'Yesterday',
+      week: 'Last 7 days',
+      month: 'Last 30 days',
+      custom: `${startDate} – ${endDate}`,
+    };
+    return labels[dateRange] || 'Today';
+  };
 
-          {showDatePicker && (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
-              />
-              <span className="text-neutral-400 text-sm">to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="border border-neutral-200 rounded-lg px-2 py-1.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
-              />
+  return (
+    <div className="min-h-full bg-slate-50 p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-wrap justify-between items-end gap-3 mb-5">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Reports</h1>
+            <p className="flex items-center gap-1.5 text-sm text-slate-500 mt-0.5">
+              <Calendar size={14} className="text-slate-400" />
+              {getDateRangeLabel()}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <select
+                value={dateRange}
+                onChange={(e) => {
+                  setDateRange(e.target.value);
+                  setShowDatePicker(e.target.value === 'custom');
+                }}
+                className="appearance-none border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-sm text-slate-700 bg-white shadow-sm focus:border-slate-400 focus:ring-2 focus:ring-slate-200 outline-none transition cursor-pointer"
+              >
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="week">Last 7 days</option>
+                <option value="month">Last 30 days</option>
+                <option value="custom">Custom range</option>
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             </div>
-          )}
+
+            {showDatePicker && (
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1.5 shadow-sm">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="text-sm text-slate-700 outline-none bg-transparent"
+                />
+                <span className="text-slate-300 text-sm">–</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="text-sm text-slate-700 outline-none bg-transparent"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-4 bg-white rounded-xl border border-slate-200 shadow-sm p-1 overflow-x-auto">
+          {TABS.map(({ key, label, icon: Icon }) => {
+            const active = tab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
+                  active
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <Icon size={15} className={active ? 'text-white' : 'text-slate-400'} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Report Content */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          {tab === 'Sales' && <SalesReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
+          {tab === 'Products' && <ProductReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
+          {tab === 'Waiters' && <WaiterReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
+          {tab === 'Profit' && <ProfitReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
+          {tab === 'Stock' && <StockReport />}
         </div>
       </div>
-
-      <div className="flex gap-2 mb-4 overflow-x-auto">
-        {TABS.map(t => (
-          <button 
-            key={t} 
-            onClick={() => setTab(t)} 
-            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${tab === t ? 'bg-brand text-white' : 'bg-white border'}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'Sales' && <SalesReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
-      {tab === 'Products' && <ProductReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
-      {tab === 'Waiters' && <WaiterReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
-      {tab === 'Profit' && <ProfitReport dateRange={dateRange} startDate={startDate} endDate={endDate} />}
-      {tab === 'Stock' && <StockReport />}
     </div>
   );
 }
 
-function Table({ cols, rows, renderRow }) {
+// ============================================================================
+// TABLE COMPONENT
+// ============================================================================
+function Table({ cols, rows, renderRow, summary, loading, emptyMessage = 'No data available' }) {
+  if (loading) {
+    return (
+      <div className="p-10 text-center text-slate-400 text-sm">
+        <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-slate-200 border-t-slate-500 mr-2 align-middle"></div>
+        Loading…
+      </div>
+    );
+  }
+
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
+        <Inbox size={22} className="text-slate-300" />
+        <p className="text-sm text-slate-400">{emptyMessage}</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead><tr className="text-left text-neutral-400 border-b">{cols.map(c => <th key={c} className="p-3">{c}</th>)}</tr></thead>
-        <tbody>
-          {rows.map(renderRow)}
-          {rows.length === 0 && <tr><td colSpan={cols.length} className="p-6 text-center text-neutral-400">No data</td></tr>}
+        <thead className="bg-slate-50 border-b border-slate-200">
+          <tr className="text-left text-slate-500">
+            {cols.map((c, i) => (
+              <th key={i} className="p-3 text-xs font-medium uppercase tracking-wide whitespace-nowrap">{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((row, i) => renderRow(row, i))}
         </tbody>
+        {summary && (
+          <tfoot className="bg-slate-50 border-t border-slate-200">
+            <tr>
+              {summary.map((item, i) => (
+                <td key={i} className="p-3 text-xs text-slate-500" colSpan={item.colSpan || 1}>
+                  {item.label}: <span className="font-semibold text-slate-800 tabular-nums">{item.value}</span>
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );
 }
 
+// ============================================================================
+// SALES REPORT
+// ============================================================================
 function SalesReport({ dateRange, startDate, endDate }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    loadData();
+  }, [dateRange, startDate, endDate]);
+
+  async function loadData() {
     setLoading(true);
     const params = new URLSearchParams();
     if (dateRange === 'today') {
@@ -114,31 +208,63 @@ function SalesReport({ dateRange, startDate, endDate }) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       params.append('date', yesterday.toISOString().split('T')[0]);
-    } else if (dateRange === 'week' || dateRange === 'month') {
-      params.append('startDate', startDate);
-      params.append('endDate', endDate);
-    } else if (dateRange === 'custom') {
+    } else if (dateRange === 'week' || dateRange === 'month' || dateRange === 'custom') {
       params.append('startDate', startDate);
       params.append('endDate', endDate);
     }
-    apiFetch(`/api/reports/sales?${params.toString()}`)
-      .then(setRows)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [dateRange, startDate, endDate]);
+    try {
+      const data = await apiFetch(`/api/reports/sales?${params.toString()}`);
+      setRows(data || []);
+    } catch (e) {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  if (loading) return <div className="text-neutral-400 p-4">Loading...</div>;
+  const totalRevenue = rows.reduce((s, r) => s + (r.revenue || 0), 0);
+  const totalTransactions = rows.reduce((s, r) => s + (r.transactions || 0), 0);
+  const totalDiscounts = rows.reduce((s, r) => s + (r.discounts || 0), 0);
 
-  return <Table cols={['Day', 'Transactions', 'Revenue', 'Discounts']} rows={rows} renderRow={r => (
-    <tr key={r.day} className="border-t"><td className="p-3">{r.day}</td><td className="p-3">{r.transactions}</td><td className="p-3">{money(r.revenue)}</td><td className="p-3">{money(r.discounts)}</td></tr>
-  )} />;
+  const summary = [
+    { label: 'Revenue', value: money(totalRevenue), colSpan: 2 },
+    { label: 'Transactions', value: totalTransactions, colSpan: 1 },
+    { label: 'Discounts', value: money(totalDiscounts), colSpan: 1 },
+  ];
+
+  const cols = ['Date', 'Transactions', 'Revenue', 'Discounts'];
+
+  return (
+    <Table
+      cols={cols}
+      rows={rows}
+      loading={loading}
+      summary={summary}
+      emptyMessage="No sales data for this period"
+      renderRow={(r, i) => (
+        <tr key={i} className="hover:bg-slate-50 transition">
+          <td className="p-3 font-medium text-slate-700">{r.day}</td>
+          <td className="p-3 text-slate-600 tabular-nums">{r.transactions}</td>
+          <td className="p-3 font-semibold text-slate-900 tabular-nums">{money(r.revenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums">{money(r.discounts)}</td>
+        </tr>
+      )}
+    />
+  );
 }
 
+// ============================================================================
+// PRODUCT REPORT
+// ============================================================================
 function ProductReport({ dateRange, startDate, endDate }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    loadData();
+  }, [dateRange, startDate, endDate]);
+
+  async function loadData() {
     setLoading(true);
     const params = new URLSearchParams();
     if (dateRange === 'today') {
@@ -147,35 +273,75 @@ function ProductReport({ dateRange, startDate, endDate }) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       params.append('date', yesterday.toISOString().split('T')[0]);
-    } else if (dateRange === 'week' || dateRange === 'month') {
-      params.append('startDate', startDate);
-      params.append('endDate', endDate);
-    } else if (dateRange === 'custom') {
+    } else if (dateRange === 'week' || dateRange === 'month' || dateRange === 'custom') {
       params.append('startDate', startDate);
       params.append('endDate', endDate);
     }
-    apiFetch(`/api/reports/products?${params.toString()}`)
-      .then(setRows)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [dateRange, startDate, endDate]);
+    try {
+      const data = await apiFetch(`/api/reports/products?${params.toString()}`);
+      setRows(data || []);
+    } catch (e) {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  if (loading) return <div className="text-neutral-400 p-4">Loading...</div>;
+  const totalRevenue = rows.reduce((s, r) => s + (r.revenue || 0), 0);
+  const totalCogs = rows.reduce((s, r) => s + (r.cogs || 0), 0);
+  const totalProfit = totalRevenue - totalCogs;
 
-  return <Table cols={['Product', 'Units Sold', 'Revenue', 'COGS', 'Gross Profit', 'Margin']} rows={rows} renderRow={r => (
-    <tr key={r.id} className="border-t">
-      <td className="p-3 font-medium">{r.name}</td><td className="p-3">{r.unitsSold}</td>
-      <td className="p-3">{money(r.revenue)}</td><td className="p-3">{money(r.cogs)}</td>
-      <td className="p-3">{money(r.grossProfit)}</td><td className="p-3">{r.marginPct.toFixed(1)}%</td>
-    </tr>
-  )} />;
+  const summary = [
+    { label: 'Revenue', value: money(totalRevenue), colSpan: 2 },
+    { label: 'COGS', value: money(totalCogs), colSpan: 1 },
+    { label: 'Profit', value: money(totalProfit), colSpan: 2 },
+  ];
+
+  const cols = ['Product', 'Units', 'Revenue', 'COGS', 'Profit', 'Margin'];
+
+  return (
+    <Table
+      cols={cols}
+      rows={rows}
+      loading={loading}
+      summary={summary}
+      emptyMessage="No product sales data"
+      renderRow={(r, i) => (
+        <tr key={i} className="hover:bg-slate-50 transition">
+          <td className="p-3 font-medium text-slate-700 truncate max-w-[140px]">{r.name}</td>
+          <td className="p-3 text-slate-600 tabular-nums">{r.unitsSold || 0}</td>
+          <td className="p-3 text-slate-800 tabular-nums">{money(r.revenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums">{money(r.cogs)}</td>
+          <td className={`p-3 font-medium tabular-nums ${r.grossProfit > 0 ? 'text-slate-900' : 'text-slate-500'}`}>
+            {money(r.grossProfit)}
+          </td>
+          <td className="p-3">
+            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+              r.marginPct > 30 ? 'bg-emerald-50 text-emerald-700' :
+              r.marginPct > 15 ? 'bg-amber-50 text-amber-700' :
+              'bg-slate-100 text-slate-600'
+            }`}>
+              {r.marginPct ? r.marginPct.toFixed(1) : '0'}%
+            </span>
+          </td>
+        </tr>
+      )}
+    />
+  );
 }
 
+// ============================================================================
+// WAITER REPORT
+// ============================================================================
 function WaiterReport({ dateRange, startDate, endDate }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    loadData();
+  }, [dateRange, startDate, endDate]);
+
+  async function loadData() {
     setLoading(true);
     const params = new URLSearchParams();
     if (dateRange === 'today') {
@@ -184,37 +350,73 @@ function WaiterReport({ dateRange, startDate, endDate }) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       params.append('date', yesterday.toISOString().split('T')[0]);
-    } else if (dateRange === 'week' || dateRange === 'month') {
-      params.append('startDate', startDate);
-      params.append('endDate', endDate);
-    } else if (dateRange === 'custom') {
+    } else if (dateRange === 'week' || dateRange === 'month' || dateRange === 'custom') {
       params.append('startDate', startDate);
       params.append('endDate', endDate);
     }
-    apiFetch(`/api/reports/waiters?${params.toString()}`)
-      .then(setRows)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [dateRange, startDate, endDate]);
+    try {
+      const data = await apiFetch(`/api/reports/waiters?${params.toString()}`);
+      setRows(data || []);
+    } catch (e) {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  if (loading) return <div className="text-neutral-400 p-4">Loading...</div>;
+  const totalRevenue = rows.reduce((s, r) => s + (r.revenue || 0), 0);
+  const totalTransactions = rows.reduce((s, r) => s + (r.transactions || 0), 0);
+  const totalShortages = rows.reduce((s, r) => s + (r.shortages || 0), 0);
 
-  return <Table cols={['Waiter', 'Transactions', 'Revenue', 'Avg Sale', 'Cash', 'Mobile', 'Card', 'Credit', 'Shortages', 'Surpluses']} rows={rows} renderRow={r => (
-    <tr key={r.id} className="border-t">
-      <td className="p-3 font-medium">{r.name}</td><td className="p-3">{r.transactions}</td>
-      <td className="p-3">{money(r.revenue)}</td><td className="p-3">{money(r.avgTransaction)}</td>
-      <td className="p-3">{money(r.cashRevenue)}</td><td className="p-3">{money(r.mobileRevenue)}</td>
-      <td className="p-3">{money(r.cardRevenue)}</td><td className="p-3">{money(r.creditRevenue)}</td>
-      <td className="p-3 text-red-500">{money(r.shortages)}</td><td className="p-3 text-green-600">{money(r.surpluses)}</td>
-    </tr>
-  )} />;
+  const summary = [
+    { label: 'Revenue', value: money(totalRevenue), colSpan: 2 },
+    { label: 'Transactions', value: totalTransactions, colSpan: 1 },
+    { label: 'Shortages', value: money(totalShortages), colSpan: 1 },
+  ];
+
+  const cols = ['Waiter', 'Txn', 'Revenue', 'Avg', 'Cash', 'Mobile', 'Card', 'Credit', 'Short', 'Surplus'];
+
+  return (
+    <Table
+      cols={cols}
+      rows={rows}
+      loading={loading}
+      summary={summary}
+      emptyMessage="No waiter data for this period"
+      renderRow={(r, i) => (
+        <tr key={i} className="hover:bg-slate-50 transition">
+          <td className="p-3 font-medium text-slate-700">{r.name}</td>
+          <td className="p-3 text-slate-600 tabular-nums">{r.transactions || 0}</td>
+          <td className="p-3 font-semibold text-slate-900 tabular-nums">{money(r.revenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums">{money(r.avgTransaction)}</td>
+          <td className="p-3 text-slate-600 tabular-nums">{money(r.cashRevenue)}</td>
+          <td className="p-3 text-slate-600 tabular-nums">{money(r.mobileRevenue)}</td>
+          <td className="p-3 text-slate-600 tabular-nums">{money(r.cardRevenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums">{money(r.creditRevenue)}</td>
+          <td className={`p-3 font-medium tabular-nums ${r.shortages > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
+            {money(r.shortages)}
+          </td>
+          <td className={`p-3 font-medium tabular-nums ${r.surpluses > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
+            {money(r.surpluses)}
+          </td>
+        </tr>
+      )}
+    />
+  );
 }
 
+// ============================================================================
+// PROFIT REPORT
+// ============================================================================
 function ProfitReport({ dateRange, startDate, endDate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    loadData();
+  }, [dateRange, startDate, endDate]);
+
+  async function loadData() {
     setLoading(true);
     const params = new URLSearchParams();
     if (dateRange === 'today') {
@@ -223,57 +425,219 @@ function ProfitReport({ dateRange, startDate, endDate }) {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       params.append('date', yesterday.toISOString().split('T')[0]);
-    } else if (dateRange === 'week' || dateRange === 'month') {
-      params.append('startDate', startDate);
-      params.append('endDate', endDate);
-    } else if (dateRange === 'custom') {
+    } else if (dateRange === 'week' || dateRange === 'month' || dateRange === 'custom') {
       params.append('startDate', startDate);
       params.append('endDate', endDate);
     }
-    apiFetch(`/api/reports/profit?${params.toString()}`)
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [dateRange, startDate, endDate]);
+    try {
+      const result = await apiFetch(`/api/reports/profit?${params.toString()}`);
+      setData(result);
+    } catch (e) {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  if (loading) return <div className="text-neutral-400 p-4">Loading...</div>;
-  if (!data) return <div className="text-neutral-400 p-4">No data available</div>;
-  
-  const rows = [
-    ['Revenue', data.revenue], ['COGS', -data.cogs], ['Gross Profit', data.grossProfit],
-    ['Gross Margin', `${data.grossMarginPct.toFixed(1)}%`], ['Operating Expenses', -data.expenses],
-    ['Net Profit', data.netProfit], ['Net Margin', `${data.netMarginPct.toFixed(1)}%`],
-  ];
+  if (loading) {
+    return (
+      <div className="p-10 text-center text-slate-400 text-sm">
+        <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-slate-200 border-t-slate-500 mr-2 align-middle"></div>
+        Loading…
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 p-12 text-center">
+        <Inbox size={22} className="text-slate-300" />
+        <p className="text-sm text-slate-400">No profit data available</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-xl shadow-sm p-4 max-w-md">
-      {rows.map(([label, value]) => (
-        <div key={label} className={`flex justify-between py-2 border-b last:border-0 ${label.includes('Profit') ? 'font-bold' : ''}`}>
-          <span>{label}</span><span>{typeof value === 'number' ? money(value) : value}</span>
+    <div className="p-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div className="rounded-lg px-4 py-3 border border-slate-200 bg-slate-50">
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Revenue</p>
+          <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">{money(data.revenue)}</p>
         </div>
-      ))}
+        <div className="rounded-lg px-4 py-3 border border-slate-200 bg-slate-50">
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Gross profit</p>
+          <p className={`text-lg font-semibold tabular-nums mt-0.5 ${data.grossProfit > 0 ? 'text-slate-900' : 'text-rose-600'}`}>
+            {money(data.grossProfit)}
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">{data.grossMarginPct?.toFixed(1) || 0}% margin</p>
+        </div>
+        <div className="rounded-lg px-4 py-3 border border-emerald-200 bg-emerald-50">
+          <p className="text-xs font-medium text-emerald-700 uppercase tracking-wide">Net profit</p>
+          <p className={`text-lg font-semibold tabular-nums mt-0.5 ${data.netProfit > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+            {money(data.netProfit)}
+          </p>
+          <p className="text-xs text-emerald-600/70 mt-0.5">{data.netMarginPct?.toFixed(1) || 0}% margin</p>
+        </div>
+      </div>
+
+      {/* Breakdown */}
+      <div className="border border-slate-200 rounded-lg overflow-hidden text-sm">
+        <div className="flex justify-between px-4 py-2.5 border-b border-slate-200 bg-slate-50">
+          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Line item</span>
+          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Amount</span>
+        </div>
+        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100">
+          <span className="text-slate-600">Revenue</span>
+          <span className="font-medium text-slate-900 tabular-nums">{money(data.revenue)}</span>
+        </div>
+        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100">
+          <span className="text-slate-600">Cost of goods sold</span>
+          <span className="text-slate-500 tabular-nums">−{money(data.cogs)}</span>
+        </div>
+        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+          <span className="font-medium text-slate-700">Gross profit</span>
+          <span className="font-medium text-slate-900 tabular-nums">{money(data.grossProfit)}</span>
+        </div>
+        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100">
+          <span className="text-slate-600">Expenses</span>
+          <span className="text-slate-500 tabular-nums">−{money(data.expenses)}</span>
+        </div>
+        <div className="flex justify-between px-4 py-2.5 bg-slate-50">
+          <span className="font-semibold text-slate-900">Net profit</span>
+          <span className={`font-semibold tabular-nums ${data.netProfit > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+            {money(data.netProfit)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
 
+// ============================================================================
+// STOCK REPORT
+// ============================================================================
 function StockReport() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    setLoading(true);
-    api.stockReport()
-      .then(setRows)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    loadData();
   }, []);
 
-  if (loading) return <div className="text-neutral-400 p-4">Loading...</div>;
+  async function loadData() {
+    setLoading(true);
+    try {
+      const data = await api.stockReport();
+      setRows(data || []);
+    } catch (e) {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  return <Table cols={['Product', 'Stock (units)', 'Avg cost/ml', 'Stock Value', 'Status']} rows={rows} renderRow={r => (
-    <tr key={r.id} className="border-t">
-      <td className="p-3 font-medium">{r.name}</td><td className="p-3">{r.stockUnits}</td>
-      <td className="p-3">{r.avgCostPerMl.toFixed(2)}</td><td className="p-3">{money(r.stockValue)}</td>
-      <td className={`p-3 ${r.lowStock ? 'text-red-500 font-medium' : 'text-green-600'}`}>{r.lowStock ? 'Low' : 'OK'}</td>
-    </tr>
-  )} />;
+  const filteredRows = useMemo(() => {
+    if (filter === 'low') {
+      return rows.filter(r => r.lowStock && r.stockUnits > 0);
+    }
+    if (filter === 'out') {
+      return rows.filter(r => r.stockUnits === 0);
+    }
+    return rows;
+  }, [rows, filter]);
+
+  const totalStockValue = rows.reduce((s, r) => s + (r.stockValue || 0), 0);
+  const lowStockCount = rows.filter(r => r.lowStock && r.stockUnits > 0).length;
+  const outOfStockCount = rows.filter(r => r.stockUnits === 0).length;
+
+  const summary = [
+    { label: 'Total value', value: money(totalStockValue), colSpan: 2 },
+    { label: 'Low stock', value: lowStockCount, colSpan: 1 },
+    { label: 'Out of stock', value: outOfStockCount, colSpan: 1 },
+  ];
+
+  const cols = ['Product', 'Stock', 'Avg cost', 'Value', 'Status'];
+
+  const FILTERS = [
+    { key: 'all', label: 'All', count: rows.length },
+    { key: 'low', label: 'Low', count: lowStockCount },
+    { key: 'out', label: 'Out', count: outOfStockCount },
+  ];
+
+  if (loading) {
+    return (
+      <div className="p-10 text-center text-slate-400 text-sm">
+        <div className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-slate-200 border-t-slate-500 mr-2 align-middle"></div>
+        Loading…
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Filter */}
+      <div className="flex flex-wrap items-center gap-1.5 px-3 py-2.5 border-b border-slate-100">
+        <span className="text-xs text-slate-400 mr-0.5">Filter</span>
+        {FILTERS.map(f => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={`text-xs font-medium px-2.5 py-1 rounded-md transition ${
+              filter === f.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {f.label} ({f.count})
+          </button>
+        ))}
+        {filter !== 'all' && (
+          <button
+            onClick={() => setFilter('all')}
+            className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 ml-1"
+          >
+            clear
+          </button>
+        )}
+      </div>
+
+      <Table
+        cols={cols}
+        rows={filteredRows}
+        loading={false}
+        summary={summary}
+        emptyMessage={filter !== 'all' ? 'No products match this filter' : 'No stock data'}
+        renderRow={(r, i) => {
+          let statusText = 'OK';
+          let statusColor = 'bg-emerald-50 text-emerald-700';
+          let StatusIcon = CheckCircle2;
+          if (r.stockUnits === 0) {
+            statusText = 'Out';
+            statusColor = 'bg-rose-50 text-rose-700';
+            StatusIcon = XCircle;
+          } else if (r.lowStock) {
+            statusText = 'Low';
+            statusColor = 'bg-amber-50 text-amber-700';
+            StatusIcon = AlertTriangle;
+          }
+          return (
+            <tr key={i} className="hover:bg-slate-50 transition">
+              <td className="p-3 font-medium text-slate-700 truncate max-w-[140px]">{r.name}</td>
+              <td className={`p-3 font-medium tabular-nums ${r.stockUnits === 0 ? 'text-slate-400' : 'text-slate-700'}`}>
+                {r.stockUnits}
+              </td>
+              <td className="p-3 text-slate-500 tabular-nums">{r.avgCostPerMl ? r.avgCostPerMl.toFixed(2) : '0.00'}</td>
+              <td className="p-3 font-medium text-slate-700 tabular-nums">{money(r.stockValue)}</td>
+              <td className="p-3">
+                <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
+                  <StatusIcon size={11} />
+                  {statusText}
+                </span>
+              </td>
+            </tr>
+          );
+        }}
+      />
+    </div>
+  );
 }
