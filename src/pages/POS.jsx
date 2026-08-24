@@ -1,4 +1,4 @@
-// POS.jsx - UPDATED UnitPicker with correct logic
+// POS.jsx - Clean digital receipt without print/download buttons
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -210,6 +210,7 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState([]);
   const [tabLabel, setTabLabel] = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [pickerProduct, setPickerProduct] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -284,6 +285,8 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
       quantity: l.qty
     }));
 
+    const label = tabLabel.trim() || customerName.trim() || undefined;
+
     try {
       if (mode === 'new') {
         const uuid = crypto.randomUUID();
@@ -291,7 +294,7 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
           uuid,
           shiftId: shift.id,
           deviceId,
-          tabLabel: tabLabel.trim() || undefined,
+          tabLabel: label,
           items,
           clientCreatedAt: new Date().toISOString()
         };
@@ -302,7 +305,7 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
           sale = {
             id: `local-${uuid}`,
             shift_id: shift.id,
-            tab_label: payload.tabLabel,
+            tab_label: label,
             subtotal,
             total: subtotal,
             status: 'OPEN',
@@ -312,7 +315,7 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
           await enqueue('OPEN_TAB', uuid, payload);
         }
         await db.openTabs.put({ ...sale, localId: String(sale.id), shiftId: shift.id });
-        onDone(`Order sent${payload.tabLabel ? ' — ' + payload.tabLabel : ''}.`);
+        onDone(`Order sent${label ? ' — ' + label : ''}.`);
       } else {
         const uuid = crypto.randomUUID();
         const payload = {
@@ -355,14 +358,25 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
           </button>
         )}
         {mode === 'new' && (
-          <div className="relative mb-3">
-            <IconTable className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input 
-              value={tabLabel} 
-              onChange={e => setTabLabel(e.target.value)} 
-              placeholder="Table / seat / customer name (optional)"
-              className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-3 text-sm bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
-            />
+          <div className="space-y-2 mb-3">
+            <div className="relative">
+              <IconUser className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                value={customerName} 
+                onChange={e => setCustomerName(e.target.value)} 
+                placeholder="Customer name (optional)"
+                className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-3 text-sm bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
+              />
+            </div>
+            <div className="relative">
+              <IconTable className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input 
+                value={tabLabel} 
+                onChange={e => setTabLabel(e.target.value)} 
+                placeholder="Table / seat number (optional)"
+                className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-3 text-sm bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
+              />
+            </div>
           </div>
         )}
         <input 
@@ -478,15 +492,12 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
 }
 
 // ============================================================================
-// UNIT PICKER - CORRECTED LOGIC
-// For 250ml: Only Bottle and Half (NO Tot)
-// For 750ml: Only Bottle and Tot (NO Half)
+// UNIT PICKER
 // ============================================================================
 function UnitPicker({ product, onPick, onClose }) {
   const volume = product.volumeMl || 0;
   const stockMl = product.stockMl || 0;
 
-  // Get stock display text with units
   const getStockDisplay = () => {
     if (!product.trackInventory) return 'Not stock-tracked';
     if (stockMl <= 0) return 'Out of stock';
@@ -524,24 +535,14 @@ function UnitPicker({ product, onPick, onClose }) {
           {product.sellingUnits
             .filter(u => u.active)
             .filter(unit => {
-              // ============================================================
-              // CORRECTED FILTER LOGIC:
-              // 250ml: Only "Bottle" and "Half" (NO Tot)
-              // 750ml: Only "Bottle" and "Tot" (NO Half)
-              // Other sizes: Show all units
-              // ============================================================
               if (volume === 250) {
-                // 250ml: only Bottle and Half
                 return unit.name === 'Bottle' || unit.name === 'Half';
               } else if (volume === 750) {
-                // 750ml: only Bottle and Tot
                 return unit.name === 'Bottle' || unit.name === 'Tot';
               }
-              // Other volumes: show all units
               return true;
             })
             .map(u => {
-              // Check if this unit can be sold based on available stock
               let isAvailable = true;
               if (product.trackInventory) {
                 if (stockMl < u.volumeMl) {
@@ -571,7 +572,6 @@ function UnitPicker({ product, onPick, onClose }) {
               );
             })}
           
-          {/* Check if any units are available */}
           {product.sellingUnits
             .filter(u => u.active)
             .filter(unit => {
@@ -657,8 +657,15 @@ function OpenTabsScreen({ shift, deviceId, user, onAddItems, onToast }) {
               className="text-left bg-white border border-neutral-200 rounded-2xl p-4 shadow-soft hover:shadow-card hover:border-brand/30 transition"
             >
               <div className="flex justify-between items-start mb-2">
-                <div className="font-display font-semibold text-ink-950">
-                  {tab.tab_label || `Order ${tab.receipt_number}`}
+                <div>
+                  <div className="font-display font-semibold text-ink-950">
+                    {tab.tab_label || `Order ${tab.receipt_number}`}
+                  </div>
+                  {tab.tab_label && (
+                    <div className="text-[10px] text-neutral-400 mt-0.5">
+                      📋 {tab.tab_label}
+                    </div>
+                  )}
                 </div>
                 {isLocalTab(tab) && (
                   <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">
@@ -671,7 +678,7 @@ function OpenTabsScreen({ shift, deviceId, user, onAddItems, onToast }) {
               </div>
               <div className="flex justify-between items-end">
                 <span className="text-xs text-neutral-400">
-                  {tab.items?.length ?? '—'} item line(s)
+                  {tab.items?.length ?? '—'} item(s)
                 </span>
                 <span className="text-lg font-bold text-brand">{money(tab.total)}</span>
               </div>
@@ -706,75 +713,147 @@ function OpenTabsScreen({ shift, deviceId, user, onAddItems, onToast }) {
 }
 
 // ============================================================================
-// TAB DETAIL - Fixed to not require admin permissions
+// TAB DETAIL - COMPACT DIGITAL RECEIPT STYLE WITH UNIT TYPES
 // ============================================================================
 function TabDetail({ tab, shift, user, onClose, onAddItems, onSettled, onVoided }) {
   const [full, setFull] = useState(tab);
   const [showSettle, setShowSettle] = useState(false);
   const [showVoid, setShowVoid] = useState(false);
+  
+  const products = useLiveQuery(() => db.products.toArray(), [], []);
 
   useEffect(() => {
     setFull(tab);
   }, [tab]);
 
+  const getProductDisplayName = (item) => {
+    if (item.product_name) return item.product_name;
+    if (item.product_id && products) {
+      const product = products.find(p => p.id === item.product_id);
+      if (product) return product.name;
+    }
+    return item.unit_name || `Product #${item.product_id}`;
+  };
+
+  const getUnitLabel = (unitName, volumeMl) => {
+    if (unitName === 'Bottle') return 'BTL';
+    if (unitName === 'Half') return '½';
+    if (unitName === 'Tot') return 'TOT';
+    return unitName || 'UNIT';
+  };
+
+  const enrichedItems = useMemo(() => {
+    return (full.items || []).map(item => ({
+      ...item,
+      displayName: getProductDisplayName(item),
+      unitLabel: getUnitLabel(item.unit_name, item.volume_ml)
+    }));
+  }, [full.items, products]);
+
+  const totalQty = enrichedItems.reduce((sum, item) => sum + item.quantity, 0);
+  const receiptNumber = full.receipt_number || `ORD-${String(full.id || full.localId || '').padStart(5, '0')}`;
+  const orderDate = full.server_created_at ? new Date(full.server_created_at) : new Date();
+  const customerName = full.tab_label || 'Walk-in';
+
   return (
     <div className="fixed inset-0 bg-black/40 flex justify-end z-40" onClick={onClose}>
-      <div className="bg-white w-full sm:w-[440px] h-full overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="p-5 border-b border-neutral-100 flex justify-between items-start">
+      <div className="bg-white w-full sm:w-[380px] h-full overflow-y-auto flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-3 border-b border-neutral-100 flex justify-between items-start">
           <div>
-            <h2 className="font-display text-xl font-semibold text-ink-950">
-              {full.tab_label || `Order ${full.receipt_number}`}
-            </h2>
-            <p className="text-sm text-neutral-400 mt-0.5">
-              {timeAgo(full.server_created_at)} · {full.receipt_number}
-            </p>
+            <h2 className="font-semibold text-sm text-ink-950">🧾 Receipt</h2>
+            <div className="flex flex-wrap items-center gap-1 text-[10px] text-neutral-400 mt-0.5">
+              <span>#{receiptNumber}</span>
+              <span>•</span>
+              <span>{orderDate.toLocaleTimeString()}</span>
+            </div>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-1">
-            <IconClose className="w-5 h-5" />
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-0.5">
+            <IconClose className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
-          <div className="divide-y divide-neutral-100 mb-5">
-            {(full.items || []).map(it => (
-              <div key={it.id} className="py-2.5 flex justify-between text-sm">
-                <div>
-                  <div className="font-medium text-ink-950">
-                    {it.quantity}× {it.unit_name} <span className="text-neutral-400 font-normal">— product #{it.product_id}</span>
+        {/* Receipt Body - Compact */}
+        <div className="flex-1 overflow-y-auto p-3 bg-neutral-50">
+          {/* Receipt Header - Compact */}
+          <div className="text-center border-b border-dashed border-neutral-300 pb-2 mb-2">
+            <h3 className="font-bold text-xs text-ink-950">INFINITY LIQUORS</h3>
+            <div className="text-[9px] text-neutral-500">
+              <span>{orderDate.toLocaleDateString()}</span>
+              <span className="mx-1">•</span>
+              <span>{orderDate.toLocaleTimeString()}</span>
+            </div>
+            <div className="text-[10px] font-medium text-ink-950 mt-0.5">
+              {customerName}
+            </div>
+          </div>
+
+          {/* Items - Compact */}
+          <div className="mb-2">
+            <div className="grid grid-cols-12 text-[9px] font-semibold text-neutral-500 border-b border-neutral-200 pb-0.5 mb-0.5">
+              <span className="col-span-5">Item</span>
+              <span className="col-span-2 text-center">Qty</span>
+              <span className="col-span-2 text-right">Price</span>
+              <span className="col-span-3 text-right">Total</span>
+            </div>
+            {enrichedItems.map((it, idx) => (
+              <div key={it.id || idx} className="grid grid-cols-12 text-[10px] py-0.5 border-b border-neutral-100">
+                <div className="col-span-5">
+                  <div className="text-ink-950 truncate pr-1 text-[10px]">{it.displayName || it.unit_name}</div>
+                  <div className="text-[8px] text-neutral-400">
+                    {it.unitLabel} · {it.volume_ml}ml
                   </div>
                 </div>
-                <div className="font-semibold">{money(it.line_total)}</div>
+                <span className="col-span-2 text-center text-neutral-600 text-[10px]">{it.quantity}</span>
+                <span className="col-span-2 text-right text-neutral-600 text-[10px]">{money(it.unit_price)}</span>
+                <span className="col-span-3 text-right font-medium text-ink-950 text-[10px]">{money(it.line_total)}</span>
               </div>
             ))}
-            {(!full.items || full.items.length === 0) && (
-              <div className="py-6 text-center text-neutral-400 text-sm">
-                No items yet
+          </div>
+
+          {/* Totals - Compact */}
+          <div className="border-t border-dashed border-neutral-300 pt-1.5 space-y-0.5 text-[10px]">
+            <div className="flex justify-between">
+              <span className="text-neutral-500">Items</span>
+              <span className="font-medium text-ink-950">{totalQty}</span>
+            </div>
+            {full.discount_total > 0 && (
+              <div className="flex justify-between text-rose-600">
+                <span>Discount</span>
+                <span>-{money(full.discount_total)}</span>
               </div>
             )}
+            <div className="flex justify-between text-sm font-bold pt-0.5 border-t border-neutral-200">
+              <span className="text-ink-950">Total</span>
+              <span className="text-ink-950">{money(full.total)}</span>
+            </div>
           </div>
-          <div className="flex justify-between text-xl font-bold text-ink-950 pt-3 border-t border-neutral-200">
-            <span>Total</span>
-            <span>{money(full.total)}</span>
+
+          {/* Footer - Compact */}
+          <div className="text-center border-t border-dashed border-neutral-300 mt-2 pt-2">
+            <p className="text-[8px] text-neutral-400">Thank you!</p>
+            <p className="text-[7px] text-neutral-300 mt-0.5">Please present to settle</p>
           </div>
         </div>
 
-        <div className="p-5 border-t border-neutral-100 space-y-2.5">
+        {/* Actions */}
+        <div className="p-2.5 border-t border-neutral-100 space-y-1.5 bg-white">
           <button 
             onClick={() => onAddItems(full)} 
-            className="w-full flex items-center justify-center gap-2 border-2 border-brand text-brand font-semibold py-3 rounded-xl hover:bg-brand-50 transition"
+            className="w-full flex items-center justify-center gap-1.5 border border-brand text-brand font-semibold py-1.5 rounded-lg hover:bg-brand-50 transition text-xs"
           >
-            <IconPlus className="w-4 h-4" /> Add Items
+            <IconPlus className="w-3.5 h-3.5" /> Add Items
           </button>
           <button 
             onClick={() => setShowSettle(true)} 
-            className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl transition shadow-soft"
+            className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-1.5 rounded-lg transition shadow-soft text-xs"
           >
             Settle Bill
           </button>
           {(user.permissions.includes('sales.refund') || user.permissions.includes('*')) && (
             <button 
               onClick={() => setShowVoid(true)} 
-              className="w-full text-rose-500 text-sm font-medium py-2"
+              className="w-full text-rose-500 text-[10px] font-medium py-1"
             >
               Void this tab
             </button>
@@ -875,7 +954,7 @@ const PAY_METHODS = [
 ];
 
 // ============================================================================
-// SETTLE MODAL - Fixed to handle backend compatibility
+// SETTLE MODAL
 // ============================================================================
 function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) {
   const [methods, setMethods] = useState([{ method: 'CASH', amount: tab.total, reference: '' }]);
@@ -981,7 +1060,6 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
     try {
       const useOutbox = !navigator.onLine || isLocalTab(tab);
       
-      // First: Call the settle endpoint - this creates the debt/credit record on the server
       if (!useOutbox) {
         const result = await apiFetch(`/api/sales/${tab.localId}/settle`, { method: 'POST', body: payload });
         console.log('Settle result:', result);
@@ -989,14 +1067,6 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
         await enqueue('SETTLE_TAB', crypto.randomUUID(), { ...payload, saleId: tab.localId });
       }
       
-      // Second: If there's a remaining balance and a customer, cache it locally for
-      // the waiter's own offline debt view. The server-side credit ledger entry for
-      // this amount was already created by /settle above (see checkCreditAuthorized /
-      // appendCreditLedger in the settle route) — we must NOT also call
-      // /api/sales/:id/debt here. That endpoint is for a genuine walk-out (a tab that
-      // was never settled at all); calling it after /settle would attempt to log a
-      // second credit entry for the *full tab total*, double-booking on top of the
-      // correct partial amount /settle already recorded.
       if (remaining > 0 && customerId) {
         const debtData = {
           sale_id: parseInt(tab.localId) || tab.localId,
@@ -1017,7 +1087,6 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
         }
       }
       
-      // Update local tab cache
       if (tab.localId) {
         const updatedTab = { ...tab, status: 'COMPLETED', settled_at: new Date().toISOString() };
         await db.openTabs.put({ ...updatedTab, localId: tab.localId, shiftId: shift.id });
