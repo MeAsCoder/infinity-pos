@@ -1,3 +1,4 @@
+// src/components/Logo.jsx
 import React from 'react';
 
 /**
@@ -22,8 +23,22 @@ export function LogoMark({ className = 'w-8 h-8', ringColor = '#c9a227', accentC
   );
 }
 
-export default function Logo({ variant = 'full', className = '' }) {
+export default function Logo({ variant = 'full', className = '', compact = false }) {
   if (variant === 'mark') return <LogoMark className={className || 'w-8 h-8'} />;
+  
+  // Compact version for mobile header
+  if (compact) {
+    return (
+      <div className={`flex items-center gap-1.5 ${className}`}>
+        <LogoMark className="w-5 h-5 shrink-0" />
+        <div className="leading-none">
+          <div className="font-display text-[11px] tracking-[0.12em] text-white font-semibold">INFINITY</div>
+          <div className="text-[6px] tracking-[0.3em] text-gold-400/80">LOUNGE</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
       <LogoMark className="w-8 h-8 shrink-0" />

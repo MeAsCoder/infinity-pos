@@ -1,0 +1,87 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ...your existing index.css content stays below... */
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  /* More compact product cards */
+  .product-card-mobile {
+    padding: 6px 8px !important;
+    border-radius: 8px !important;
+  }
+  
+  .product-card-mobile .product-name {
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+  }
+  
+  .product-card-mobile .product-stock {
+    font-size: 8px !important;
+  }
+  
+  .product-card-mobile .product-price {
+    font-size: 10px !important;
+  }
+  
+  /* Compact cart items */
+  .cart-item-mobile {
+    padding: 6px 8px !important;
+  }
+  
+  .cart-item-mobile .item-name {
+    font-size: 11px !important;
+  }
+  
+  .cart-item-mobile .item-price {
+    font-size: 11px !important;
+  }
+}
+
+/* Prevent zoom on input focus (iOS) */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  select,
+  textarea,
+  input {
+    font-size: 16px !important;
+  }
+}
+
+/* Better touch targets for mobile */
+button,
+a,
+select,
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Safe area insets for notched phones */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}

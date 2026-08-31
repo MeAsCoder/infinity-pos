@@ -15,6 +15,19 @@ import {
   Inbox,
 } from 'lucide-react';
 
+// Mobile-responsiveness pass:
+// 1. Tab bar relied on overflow-x-auto for scrolling but the buttons had no
+//    shrink-0 — same bug found in WaiterDashboard.jsx and AdminDashboard.jsx.
+//    Flex compressed the 5 tabs to fit instead of letting the row overflow,
+//    so labels would overlap/clip on a narrow phone. Fixed.
+// 2. The custom date-range row (two native date inputs side by side) had no
+//    wrap behavior and could get tight on a 320-375px screen. Now wraps and
+//    goes full-width on mobile.
+// 3. Stock report filter buttons bumped to a real touch target.
+// This file was already in decent shape otherwise (consistent text sizing,
+// horizontally-scrolling tables with whitespace-nowrap) so the rest is
+// left as-is.
+
 function money(n) { return `KES ${Number(n || 0).toLocaleString()}`; }
 
 const TABS = [
@@ -52,10 +65,10 @@ export default function Reports() {
   };
 
   return (
-    <div className="min-h-full bg-slate-50 p-4 sm:p-6">
+    <div className="min-h-full bg-slate-50 p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-wrap justify-between items-end gap-3 mb-5">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:justify-between sm:items-end gap-3 mb-5">
           <div>
             <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Reports</h1>
             <p className="flex items-center gap-1.5 text-sm text-slate-500 mt-0.5">
@@ -64,7 +77,7 @@ export default function Reports() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2">
             <div className="relative">
               <select
                 value={dateRange}
@@ -72,7 +85,7 @@ export default function Reports() {
                   setDateRange(e.target.value);
                   setShowDatePicker(e.target.value === 'custom');
                 }}
-                className="appearance-none border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-sm text-slate-700 bg-white shadow-sm focus:border-slate-400 focus:ring-2 focus:ring-slate-200 outline-none transition cursor-pointer"
+                className="w-full sm:w-auto appearance-none border border-slate-200 rounded-lg pl-3 pr-8 py-2.5 text-base text-slate-700 bg-white shadow-sm focus:border-slate-400 focus:ring-2 focus:ring-slate-200 outline-none transition cursor-pointer min-h-[44px]"
               >
                 <option value="today">Today</option>
                 <option value="yesterday">Yesterday</option>
@@ -84,34 +97,36 @@ export default function Reports() {
             </div>
 
             {showDatePicker && (
-              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-1.5 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 py-2 shadow-sm">
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="text-sm text-slate-700 outline-none bg-transparent"
+                  className="text-base text-slate-700 outline-none bg-transparent min-h-[36px] flex-1 min-w-0"
                 />
-                <span className="text-slate-300 text-sm">–</span>
+                <span className="text-slate-300 text-sm shrink-0">–</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="text-sm text-slate-700 outline-none bg-transparent"
+                  className="text-base text-slate-700 outline-none bg-transparent min-h-[36px] flex-1 min-w-0"
                 />
               </div>
             )}
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-4 bg-white rounded-xl border border-slate-200 shadow-sm p-1 overflow-x-auto">
+        {/* Tabs — shrink-0 on each button is the key fix: without it, flex
+            compresses the 5 tabs to fit the screen and their labels overlap
+            instead of the row scrolling horizontally. */}
+        <div className="flex flex-nowrap gap-1 mb-4 bg-white rounded-xl border border-slate-200 shadow-sm p-1 overflow-x-auto">
           {TABS.map(({ key, label, icon: Icon }) => {
             const active = tab === key;
             return (
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
+                className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition min-h-[40px] ${
                   active
                     ? 'bg-slate-900 text-white shadow-sm'
                     : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
@@ -176,7 +191,7 @@ function Table({ cols, rows, renderRow, summary, loading, emptyMessage = 'No dat
           <tfoot className="bg-slate-50 border-t border-slate-200">
             <tr>
               {summary.map((item, i) => (
-                <td key={i} className="p-3 text-xs text-slate-500" colSpan={item.colSpan || 1}>
+                <td key={i} className="p-3 text-xs text-slate-500 whitespace-nowrap" colSpan={item.colSpan || 1}>
                   {item.label}: <span className="font-semibold text-slate-800 tabular-nums">{item.value}</span>
                 </td>
               ))}
@@ -243,10 +258,10 @@ function SalesReport({ dateRange, startDate, endDate }) {
       emptyMessage="No sales data for this period"
       renderRow={(r, i) => (
         <tr key={i} className="hover:bg-slate-50 transition">
-          <td className="p-3 font-medium text-slate-700">{r.day}</td>
-          <td className="p-3 text-slate-600 tabular-nums">{r.transactions}</td>
-          <td className="p-3 font-semibold text-slate-900 tabular-nums">{money(r.revenue)}</td>
-          <td className="p-3 text-slate-500 tabular-nums">{money(r.discounts)}</td>
+          <td className="p-3 font-medium text-slate-700 whitespace-nowrap">{r.day}</td>
+          <td className="p-3 text-slate-600 tabular-nums whitespace-nowrap">{r.transactions}</td>
+          <td className="p-3 font-semibold text-slate-900 tabular-nums whitespace-nowrap">{money(r.revenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums whitespace-nowrap">{money(r.discounts)}</td>
         </tr>
       )}
     />
@@ -309,13 +324,13 @@ function ProductReport({ dateRange, startDate, endDate }) {
       renderRow={(r, i) => (
         <tr key={i} className="hover:bg-slate-50 transition">
           <td className="p-3 font-medium text-slate-700 truncate max-w-[140px]">{r.name}</td>
-          <td className="p-3 text-slate-600 tabular-nums">{r.unitsSold || 0}</td>
-          <td className="p-3 text-slate-800 tabular-nums">{money(r.revenue)}</td>
-          <td className="p-3 text-slate-500 tabular-nums">{money(r.cogs)}</td>
-          <td className={`p-3 font-medium tabular-nums ${r.grossProfit > 0 ? 'text-slate-900' : 'text-slate-500'}`}>
+          <td className="p-3 text-slate-600 tabular-nums whitespace-nowrap">{r.unitsSold || 0}</td>
+          <td className="p-3 text-slate-800 tabular-nums whitespace-nowrap">{money(r.revenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums whitespace-nowrap">{money(r.cogs)}</td>
+          <td className={`p-3 font-medium tabular-nums whitespace-nowrap ${r.grossProfit > 0 ? 'text-slate-900' : 'text-slate-500'}`}>
             {money(r.grossProfit)}
           </td>
-          <td className="p-3">
+          <td className="p-3 whitespace-nowrap">
             <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
               r.marginPct > 30 ? 'bg-emerald-50 text-emerald-700' :
               r.marginPct > 15 ? 'bg-amber-50 text-amber-700' :
@@ -385,18 +400,18 @@ function WaiterReport({ dateRange, startDate, endDate }) {
       emptyMessage="No waiter data for this period"
       renderRow={(r, i) => (
         <tr key={i} className="hover:bg-slate-50 transition">
-          <td className="p-3 font-medium text-slate-700">{r.name}</td>
-          <td className="p-3 text-slate-600 tabular-nums">{r.transactions || 0}</td>
-          <td className="p-3 font-semibold text-slate-900 tabular-nums">{money(r.revenue)}</td>
-          <td className="p-3 text-slate-500 tabular-nums">{money(r.avgTransaction)}</td>
-          <td className="p-3 text-slate-600 tabular-nums">{money(r.cashRevenue)}</td>
-          <td className="p-3 text-slate-600 tabular-nums">{money(r.mobileRevenue)}</td>
-          <td className="p-3 text-slate-600 tabular-nums">{money(r.cardRevenue)}</td>
-          <td className="p-3 text-slate-500 tabular-nums">{money(r.creditRevenue)}</td>
-          <td className={`p-3 font-medium tabular-nums ${r.shortages > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
+          <td className="p-3 font-medium text-slate-700 whitespace-nowrap">{r.name}</td>
+          <td className="p-3 text-slate-600 tabular-nums whitespace-nowrap">{r.transactions || 0}</td>
+          <td className="p-3 font-semibold text-slate-900 tabular-nums whitespace-nowrap">{money(r.revenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums whitespace-nowrap">{money(r.avgTransaction)}</td>
+          <td className="p-3 text-slate-600 tabular-nums whitespace-nowrap">{money(r.cashRevenue)}</td>
+          <td className="p-3 text-slate-600 tabular-nums whitespace-nowrap">{money(r.mobileRevenue)}</td>
+          <td className="p-3 text-slate-600 tabular-nums whitespace-nowrap">{money(r.cardRevenue)}</td>
+          <td className="p-3 text-slate-500 tabular-nums whitespace-nowrap">{money(r.creditRevenue)}</td>
+          <td className={`p-3 font-medium tabular-nums whitespace-nowrap ${r.shortages > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
             {money(r.shortages)}
           </td>
-          <td className={`p-3 font-medium tabular-nums ${r.surpluses > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
+          <td className={`p-3 font-medium tabular-nums whitespace-nowrap ${r.surpluses > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
             {money(r.surpluses)}
           </td>
         </tr>
@@ -458,7 +473,7 @@ function ProfitReport({ dateRange, startDate, endDate }) {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-3 sm:p-4">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <div className="rounded-lg px-4 py-3 border border-slate-200 bg-slate-50">
@@ -483,27 +498,27 @@ function ProfitReport({ dateRange, startDate, endDate }) {
 
       {/* Breakdown */}
       <div className="border border-slate-200 rounded-lg overflow-hidden text-sm">
-        <div className="flex justify-between px-4 py-2.5 border-b border-slate-200 bg-slate-50">
+        <div className="flex justify-between px-3 sm:px-4 py-2.5 border-b border-slate-200 bg-slate-50">
           <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Line item</span>
           <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">Amount</span>
         </div>
-        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100">
+        <div className="flex justify-between px-3 sm:px-4 py-2.5 border-b border-slate-100">
           <span className="text-slate-600">Revenue</span>
           <span className="font-medium text-slate-900 tabular-nums">{money(data.revenue)}</span>
         </div>
-        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100">
+        <div className="flex justify-between px-3 sm:px-4 py-2.5 border-b border-slate-100">
           <span className="text-slate-600">Cost of goods sold</span>
           <span className="text-slate-500 tabular-nums">−{money(data.cogs)}</span>
         </div>
-        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50">
+        <div className="flex justify-between px-3 sm:px-4 py-2.5 border-b border-slate-100 bg-slate-50">
           <span className="font-medium text-slate-700">Gross profit</span>
           <span className="font-medium text-slate-900 tabular-nums">{money(data.grossProfit)}</span>
         </div>
-        <div className="flex justify-between px-4 py-2.5 border-b border-slate-100">
+        <div className="flex justify-between px-3 sm:px-4 py-2.5 border-b border-slate-100">
           <span className="text-slate-600">Expenses</span>
           <span className="text-slate-500 tabular-nums">−{money(data.expenses)}</span>
         </div>
-        <div className="flex justify-between px-4 py-2.5 bg-slate-50">
+        <div className="flex justify-between px-3 sm:px-4 py-2.5 bg-slate-50">
           <span className="font-semibold text-slate-900">Net profit</span>
           <span className={`font-semibold tabular-nums ${data.netProfit > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
             {money(data.netProfit)}
@@ -578,13 +593,13 @@ function StockReport() {
   return (
     <div>
       {/* Filter */}
-      <div className="flex flex-wrap items-center gap-1.5 px-3 py-2.5 border-b border-slate-100">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 border-b border-slate-100">
         <span className="text-xs text-slate-400 mr-0.5">Filter</span>
         {FILTERS.map(f => (
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`text-xs font-medium px-2.5 py-1 rounded-md transition ${
+            className={`text-xs font-medium px-3 py-1.5 rounded-md transition min-h-[32px] ${
               filter === f.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
@@ -594,7 +609,7 @@ function StockReport() {
         {filter !== 'all' && (
           <button
             onClick={() => setFilter('all')}
-            className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 ml-1"
+            className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2 min-h-[32px] px-1"
           >
             clear
           </button>
@@ -623,12 +638,12 @@ function StockReport() {
           return (
             <tr key={i} className="hover:bg-slate-50 transition">
               <td className="p-3 font-medium text-slate-700 truncate max-w-[140px]">{r.name}</td>
-              <td className={`p-3 font-medium tabular-nums ${r.stockUnits === 0 ? 'text-slate-400' : 'text-slate-700'}`}>
+              <td className={`p-3 font-medium tabular-nums whitespace-nowrap ${r.stockUnits === 0 ? 'text-slate-400' : 'text-slate-700'}`}>
                 {r.stockUnits}
               </td>
-              <td className="p-3 text-slate-500 tabular-nums">{r.avgCostPerMl ? r.avgCostPerMl.toFixed(2) : '0.00'}</td>
-              <td className="p-3 font-medium text-slate-700 tabular-nums">{money(r.stockValue)}</td>
-              <td className="p-3">
+              <td className="p-3 text-slate-500 tabular-nums whitespace-nowrap">{r.avgCostPerMl ? r.avgCostPerMl.toFixed(2) : '0.00'}</td>
+              <td className="p-3 font-medium text-slate-700 tabular-nums whitespace-nowrap">{money(r.stockValue)}</td>
+              <td className="p-3 whitespace-nowrap">
                 <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor}`}>
                   <StatusIcon size={11} />
                   {statusText}

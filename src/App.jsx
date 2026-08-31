@@ -1,4 +1,4 @@
-// App.js
+// src/App.jsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -7,7 +7,7 @@ import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
 import POS from './pages/POS';
 import ShiftScreen from './pages/ShiftScreen';
-import WaiterDashboard from './pages/WaiterDashboard'; // Add this import
+import WaiterDashboard from './pages/WaiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import Products from './pages/Products';
 import StockManagement from './pages/StockManagement';
@@ -46,24 +46,25 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen bg-neutral-50">
-      <Sidebar />
-      <div className="flex-1 min-w-0">
-        <Routes>
-          <Route path="/login" element={<Navigate to="/pos" replace />} />
-          <Route path="/pos" element={<Protected permission="sales.create"><POS /></Protected>} />
-          <Route path="/shift" element={<Protected><ShiftScreen /></Protected>} />
-          <Route path="/waiter-dashboard" element={<Protected><WaiterDashboard /></Protected>} />
-          <Route path="/admin" element={<Protected permission="reports.view"><AdminDashboard /></Protected>} />
-          <Route path="/admin/products" element={<Protected permission="products.manage"><Products /></Protected>} />
-          <Route path="/admin/stock" element={<Protected permission="stock.receive"><StockManagement /></Protected>} />
-          <Route path="/admin/credit" element={<Protected permission="credit.manage"><Credit /></Protected>} />
-          <Route path="/admin/reports" element={<Protected permission="reports.view"><Reports /></Protected>} />
-          <Route path="/admin/expenses" element={<Protected permission="expenses.manage"><Expenses /></Protected>} />
-          <Route path="/admin/users" element={<Protected permission="users.manage"><Users /></Protected>} />
-          <Route path="/admin/audit" element={<Protected permission="audit.view"><AuditLog /></Protected>} />
-          <Route path="*" element={<Navigate to="/pos" replace />} />
-        </Routes>
-      </div>
+      <Sidebar>
+        <div className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden">
+          <Routes>
+            <Route path="/login" element={<Navigate to="/pos" replace />} />
+            <Route path="/pos" element={<Protected permission="sales.create"><POS /></Protected>} />
+            <Route path="/shift" element={<Protected><ShiftScreen /></Protected>} />
+            <Route path="/waiter-dashboard" element={<Protected><WaiterDashboard /></Protected>} />
+            <Route path="/admin" element={<Protected permission="reports.view"><AdminDashboard /></Protected>} />
+            <Route path="/admin/products" element={<Protected permission="products.manage"><Products /></Protected>} />
+            <Route path="/admin/stock" element={<Protected permission="stock.receive"><StockManagement /></Protected>} />
+            <Route path="/admin/credit" element={<Protected permission="credit.manage"><Credit /></Protected>} />
+            <Route path="/admin/reports" element={<Protected permission="reports.view"><Reports /></Protected>} />
+            <Route path="/admin/expenses" element={<Protected permission="expenses.manage"><Expenses /></Protected>} />
+            <Route path="/admin/users" element={<Protected permission="users.manage"><Users /></Protected>} />
+            <Route path="/admin/audit" element={<Protected permission="audit.view"><AuditLog /></Protected>} />
+            <Route path="*" element={<Navigate to="/pos" replace />} />
+          </Routes>
+        </div>
+      </Sidebar>
     </div>
   );
 }

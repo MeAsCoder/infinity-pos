@@ -4,11 +4,23 @@ import { enqueue } from '../db/offlineDb';
 import { useAuth } from '../context/AuthContext';
 import { IconPlus, IconClose, IconSearch } from '../components/Icons';
 
+// Mobile-responsiveness pass:
+// 1. Labels/badges/filter buttons sat at text-[10px] — technically visible
+//    but hard to read and, on the filter/restock buttons, backed by tap
+//    targets under 24px tall. Bumped to text-xs with real padding.
+// 2. Form inputs (quantity, cost, notes, change amount) were text-sm (14px),
+//    which triggers iOS Safari's auto-zoom on focus. Bumped to text-base.
+// 3. Tab bar and "Change product" / "restock" links given min-height so
+//    they're comfortably tappable, not just visually present.
+// The two-column numeric grids (Quantity/Cost, Change/Reason) are left as
+// grid-cols-2 — these are short number fields that fit fine side-by-side
+// even on a narrow phone, unlike longer text inputs in other files.
+
 function money(n) { return `KES ${Number(n || 0).toLocaleString()}`; }
 
 export default function StockManagement() {
   const [tab, setTab] = useState('receive');
-  
+
   return (
     <div className="p-3 max-w-5xl mx-auto">
       {/* Header */}
@@ -26,10 +38,10 @@ export default function StockManagement() {
           { id: 'adjust', label: 'Adjustments' },
           { id: 'lowstock', label: 'Low Stock' }
         ].map(t => (
-          <button 
-            key={t.id} 
-            onClick={() => setTab(t.id)} 
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`shrink-0 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition min-h-[40px] ${
               tab === t.id ? 'bg-gray-800 text-white' : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
@@ -55,7 +67,7 @@ function useProductSearch() {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+
   useEffect(() => {
     const t = setTimeout(async () => {
       if (!q) { setResults([]); setLoading(false); return; }
@@ -71,7 +83,7 @@ function useProductSearch() {
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
-  
+
   return { q, setQ, results, loading };
 }
 
@@ -89,18 +101,18 @@ function ReceiveStock() {
   async function submit() {
     if (!product) { setErr('Please select a product'); return; }
     if (!form.quantityUnits || Number(form.quantityUnits) <= 0) { setErr('Please enter a valid quantity'); return; }
-    
+
     setBusy(true); setMsg(''); setErr('');
     const clientUuid = crypto.randomUUID();
-    const payload = { 
-      productId: product.id, 
-      quantityUnits: Number(form.quantityUnits), 
-      totalCost: Number(form.totalCost) || 0, 
-      invoiceRef: form.invoiceRef || null, 
-      notes: form.notes || null, 
-      clientUuid 
+    const payload = {
+      productId: product.id,
+      quantityUnits: Number(form.quantityUnits),
+      totalCost: Number(form.totalCost) || 0,
+      invoiceRef: form.invoiceRef || null,
+      notes: form.notes || null,
+      clientUuid
     };
-    
+
     try {
       if (navigator.onLine) {
         await apiFetch('/api/inventory/receive', { method: 'POST', body: payload });
@@ -119,82 +131,82 @@ function ReceiveStock() {
       } else {
         setErr(e.message || 'Failed to receive stock');
       }
-    } finally { 
-      setBusy(false); 
+    } finally {
+      setBusy(false);
     }
   }
 
   if (product) {
     return (
-      <div className="p-4">
-        <div className="flex justify-between items-center mb-4">
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
           <div>
             <p className="text-sm font-medium text-gray-800">{product.name}</p>
             <p className="text-xs text-gray-400">
               {product.volumeMl}ml · Current stock: {product.stockDisplay || 0} units
             </p>
           </div>
-          <button 
-            onClick={() => { setProduct(null); setQ(''); }} 
-            className="text-xs text-gray-400 hover:text-gray-600 transition"
+          <button
+            onClick={() => { setProduct(null); setQ(''); }}
+            className="text-xs text-gray-400 hover:text-gray-600 transition min-h-[36px]"
           >
             ← Change product
           </button>
         </div>
 
-        {err && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-3 text-xs text-gray-700">{err}</div>}
-        {msg && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-3 text-xs text-gray-700">{msg}</div>}
+        {err && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3 text-sm text-gray-700">{err}</div>}
+        {msg && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3 text-sm text-gray-700">{msg}</div>}
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-gray-400 block mb-0.5">Quantity (units)</label>
-              <input 
-                type="number" 
-                placeholder="0" 
-                value={form.quantityUnits} 
-                onChange={e => setForm(f => ({ ...f, quantityUnits: e.target.value }))} 
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
+              <label className="text-xs text-gray-400 block mb-1">Quantity (units)</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={form.quantityUnits}
+                onChange={e => setForm(f => ({ ...f, quantityUnits: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
                 autoFocus
               />
             </div>
             <div>
-              <label className="text-[10px] text-gray-400 block mb-0.5">Total Cost (KES)</label>
-              <input 
-                type="number" 
-                placeholder="0" 
-                value={form.totalCost} 
-                onChange={e => setForm(f => ({ ...f, totalCost: e.target.value }))} 
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
+              <label className="text-xs text-gray-400 block mb-1">Total Cost (KES)</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={form.totalCost}
+                onChange={e => setForm(f => ({ ...f, totalCost: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
               />
             </div>
           </div>
-          
+
           <div>
-            <label className="text-[10px] text-gray-400 block mb-0.5">Invoice / Reference</label>
-            <input 
-              placeholder="e.g. INV-001" 
-              value={form.invoiceRef} 
-              onChange={e => setForm(f => ({ ...f, invoiceRef: e.target.value }))} 
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
+            <label className="text-xs text-gray-400 block mb-1">Invoice / Reference</label>
+            <input
+              placeholder="e.g. INV-001"
+              value={form.invoiceRef}
+              onChange={e => setForm(f => ({ ...f, invoiceRef: e.target.value }))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
             />
           </div>
-          
+
           <div>
-            <label className="text-[10px] text-gray-400 block mb-0.5">Notes</label>
-            <textarea 
-              placeholder="Optional notes..." 
-              value={form.notes} 
-              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} 
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
+            <label className="text-xs text-gray-400 block mb-1">Notes</label>
+            <textarea
+              placeholder="Optional notes..."
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
               rows={2}
             />
           </div>
-          
-          <button 
-            disabled={busy} 
-            onClick={submit} 
-            className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-2.5 rounded-lg text-sm transition disabled:opacity-50"
+
+          <button
+            disabled={busy}
+            onClick={submit}
+            className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 rounded-lg text-base transition disabled:opacity-50 min-h-[48px]"
           >
             {busy ? 'Processing...' : 'Receive Stock'}
           </button>
@@ -204,53 +216,53 @@ function ReceiveStock() {
   }
 
   return (
-    <div className="p-4">
+    <div className="p-3 sm:p-4">
       <div className="relative">
-        <span className="text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 text-xs">🔍</span>
-        <input 
-          value={q} 
-          onChange={e => setQ(e.target.value)} 
-          placeholder="Search product to receive stock..." 
-          className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
+        <span className="text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 text-sm">🔍</span>
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search product to receive stock..."
+          className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
           autoFocus
         />
       </div>
-      
+
       {loading && (
-        <div className="py-6 text-center text-gray-400 text-xs">
+        <div className="py-6 text-center text-gray-400 text-sm">
           <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-gray-600 mr-2"></span>
           Searching...
         </div>
       )}
-      
+
       {!loading && q && results.length === 0 && (
-        <div className="py-6 text-center text-gray-400 text-xs">
+        <div className="py-6 text-center text-gray-400 text-sm">
           No products found matching "{q}"
         </div>
       )}
-      
+
       {results.length > 0 && (
         <div className="mt-2 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-60 overflow-y-auto">
           {results.map(p => (
-            <button 
-              key={p.id} 
-              onClick={() => setProduct(p)} 
-              className="w-full text-left px-3 py-2 hover:bg-gray-50 transition flex justify-between items-center"
+            <button
+              key={p.id}
+              onClick={() => setProduct(p)}
+              className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition flex justify-between items-center gap-2 min-h-[48px]"
             >
-              <div>
-                <div className="text-sm font-medium text-gray-800">{p.name}</div>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
                 <div className="text-xs text-gray-400">{p.volumeMl}ml · {p.category || 'Uncategorized'}</div>
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-gray-500 shrink-0">
                 {p.stockDisplay || 0} units
               </div>
             </button>
           ))}
         </div>
       )}
-      
+
       {!q && !loading && (
-        <div className="py-8 text-center text-gray-400 text-xs">
+        <div className="py-8 text-center text-gray-400 text-sm">
           Search for a product to receive stock
         </div>
       )}
@@ -281,17 +293,17 @@ function AdjustStock() {
     if (!product) { setErr('Please select a product'); return; }
     if (!form.changeMl || Number(form.changeMl) === 0) { setErr('Please enter a valid change amount'); return; }
     if (!form.notes) { setErr('Notes are required for adjustments'); return; }
-    
+
     setBusy(true); setMsg(''); setErr('');
     const clientUuid = crypto.randomUUID();
-    const payload = { 
-      productId: product.id, 
-      changeMl: Number(form.changeMl), 
-      reason: form.reason, 
-      notes: form.notes, 
-      clientUuid 
+    const payload = {
+      productId: product.id,
+      changeMl: Number(form.changeMl),
+      reason: form.reason,
+      notes: form.notes,
+      clientUuid
     };
-    
+
     try {
       if (navigator.onLine) {
         await apiFetch('/api/inventory/adjust', { method: 'POST', body: payload });
@@ -310,59 +322,59 @@ function AdjustStock() {
       } else {
         setErr(e.message || 'Failed to record adjustment');
       }
-    } finally { 
-      setBusy(false); 
+    } finally {
+      setBusy(false);
     }
   }
 
   if (product) {
     const change = Number(form.changeMl) || 0;
     const isLoss = change < 0;
-    
+
     return (
-      <div className="p-4">
-        <div className="flex justify-between items-center mb-4">
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
           <div>
             <p className="text-sm font-medium text-gray-800">{product.name}</p>
             <p className="text-xs text-gray-400">
               {product.volumeMl}ml · Current stock: {product.stockDisplay || 0} units
             </p>
           </div>
-          <button 
-            onClick={() => { setProduct(null); setQ(''); }} 
-            className="text-xs text-gray-400 hover:text-gray-600 transition"
+          <button
+            onClick={() => { setProduct(null); setQ(''); }}
+            className="text-xs text-gray-400 hover:text-gray-600 transition min-h-[36px]"
           >
             ← Change product
           </button>
         </div>
 
-        {err && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-3 text-xs text-gray-700">{err}</div>}
-        {msg && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-3 text-xs text-gray-700">{msg}</div>}
+        {err && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3 text-sm text-gray-700">{err}</div>}
+        {msg && <div className="bg-gray-50 border border-gray-200 rounded-lg p-2.5 mb-3 text-sm text-gray-700">{msg}</div>}
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-gray-400 block mb-0.5">Change (ml)</label>
-              <input 
-                type="number" 
-                placeholder="e.g. -250" 
-                value={form.changeMl} 
-                onChange={e => setForm(f => ({ ...f, changeMl: e.target.value }))} 
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition ${
+              <label className="text-xs text-gray-400 block mb-1">Change (ml)</label>
+              <input
+                type="number"
+                placeholder="e.g. -250"
+                value={form.changeMl}
+                onChange={e => setForm(f => ({ ...f, changeMl: e.target.value }))}
+                className={`w-full border rounded-lg px-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition ${
                   isLoss ? 'border-gray-300' : 'border-gray-200'
                 }`}
                 autoFocus
               />
-              <p className="text-[10px] text-gray-400 mt-0.5">
+              <p className="text-xs text-gray-400 mt-1">
                 {isLoss ? '⬇️ Negative = stock loss' : '⬆️ Positive = stock found'}
               </p>
             </div>
             <div>
-              <label className="text-[10px] text-gray-400 block mb-0.5">Reason</label>
-              <select 
-                value={form.reason} 
-                onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} 
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition bg-white"
+              <label className="text-xs text-gray-400 block mb-1">Reason</label>
+              <select
+                value={form.reason}
+                onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition bg-white"
               >
                 {reasons.map(r => (
                   <option key={r.value} value={r.value}>{r.label}</option>
@@ -370,35 +382,35 @@ function AdjustStock() {
               </select>
             </div>
           </div>
-          
+
           <div>
-            <label className="text-[10px] text-gray-400 block mb-0.5">Notes <span className="text-gray-300">*</span></label>
-            <textarea 
-              placeholder="Required: Describe the reason for this adjustment..." 
-              value={form.notes} 
-              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} 
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
+            <label className="text-xs text-gray-400 block mb-1">Notes <span className="text-gray-400">*</span></label>
+            <textarea
+              placeholder="Required: Describe the reason for this adjustment..."
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
               rows={2}
             />
           </div>
-          
-          <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
-            <div className="flex justify-between text-xs">
+
+          <div className="bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200">
+            <div className="flex justify-between text-sm">
               <span className="text-gray-500">Current stock</span>
               <span className="font-medium text-gray-800">{product.stockDisplay || 0} units</span>
             </div>
-            <div className="flex justify-between text-xs mt-0.5">
+            <div className="flex justify-between text-sm mt-1">
               <span className="text-gray-500">After adjustment</span>
               <span className={`font-medium ${(product.stockDisplay || 0) + (change / (product.volumeMl || 1)) < 0 ? 'text-gray-500' : 'text-gray-800'}`}>
                 {Math.round((product.stockDisplay || 0) + (change / (product.volumeMl || 1)))} units
               </span>
             </div>
           </div>
-          
-          <button 
-            disabled={busy} 
-            onClick={submit} 
-            className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-2.5 rounded-lg text-sm transition disabled:opacity-50"
+
+          <button
+            disabled={busy}
+            onClick={submit}
+            className="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 rounded-lg text-base transition disabled:opacity-50 min-h-[48px]"
           >
             {busy ? 'Processing...' : 'Record Adjustment'}
           </button>
@@ -408,59 +420,59 @@ function AdjustStock() {
   }
 
   return (
-    <div className="p-4">
-      <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-200 mb-3">
+    <div className="p-3 sm:p-4">
+      <div className="bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200 mb-3">
         <p className="text-xs text-gray-500">
           ⚠️ Adjustments require a reason and notes. Use a negative number (in ml) for a loss, positive for found stock.
         </p>
       </div>
-      
+
       <div className="relative">
-        <span className="text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 text-xs">🔍</span>
-        <input 
-          value={q} 
-          onChange={e => setQ(e.target.value)} 
-          placeholder="Search product to adjust..." 
-          className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
+        <span className="text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 text-sm">🔍</span>
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search product to adjust..."
+          className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5 text-base focus:border-gray-400 focus:ring-1 focus:ring-gray-400 outline-none transition"
           autoFocus
         />
       </div>
-      
+
       {loading && (
-        <div className="py-6 text-center text-gray-400 text-xs">
+        <div className="py-6 text-center text-gray-400 text-sm">
           <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-gray-600 mr-2"></span>
           Searching...
         </div>
       )}
-      
+
       {!loading && q && results.length === 0 && (
-        <div className="py-6 text-center text-gray-400 text-xs">
+        <div className="py-6 text-center text-gray-400 text-sm">
           No products found matching "{q}"
         </div>
       )}
-      
+
       {results.length > 0 && (
         <div className="mt-2 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-60 overflow-y-auto">
           {results.map(p => (
-            <button 
-              key={p.id} 
-              onClick={() => setProduct(p)} 
-              className="w-full text-left px-3 py-2 hover:bg-gray-50 transition flex justify-between items-center"
+            <button
+              key={p.id}
+              onClick={() => setProduct(p)}
+              className="w-full text-left px-3 py-2.5 hover:bg-gray-50 transition flex justify-between items-center gap-2 min-h-[48px]"
             >
-              <div>
-                <div className="text-sm font-medium text-gray-800">{p.name}</div>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
                 <div className="text-xs text-gray-400">{p.volumeMl}ml · {p.category || 'Uncategorized'}</div>
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-gray-500 shrink-0">
                 {p.stockDisplay || 0} units
               </div>
             </button>
           ))}
         </div>
       )}
-      
+
       {!q && !loading && (
-        <div className="py-8 text-center text-gray-400 text-xs">
+        <div className="py-8 text-center text-gray-400 text-sm">
           Search for a product to adjust
         </div>
       )}
@@ -476,8 +488,8 @@ function LowStock() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => { 
-    loadData(); 
+  useEffect(() => {
+    loadData();
   }, []);
 
   async function loadData() {
@@ -502,7 +514,7 @@ function LowStock() {
 
   if (loading) {
     return (
-      <div className="p-6 text-center text-gray-400 text-xs">
+      <div className="p-6 text-center text-gray-400 text-sm">
         <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-gray-600 mr-2"></span>
         Loading...
       </div>
@@ -522,11 +534,11 @@ function LowStock() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-1.5 p-3 border-b border-gray-100">
-        <span className="text-[10px] text-gray-400">Filter:</span>
+      <div className="flex flex-wrap items-center gap-2 p-3 border-b border-gray-100">
+        <span className="text-xs text-gray-400">Filter:</span>
         <button
           onClick={() => setFilter('all')}
-          className={`text-[10px] px-2 py-0.5 rounded transition ${
+          className={`text-xs px-3 py-1.5 rounded transition min-h-[32px] ${
             filter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
@@ -534,7 +546,7 @@ function LowStock() {
         </button>
         <button
           onClick={() => setFilter('critical')}
-          className={`text-[10px] px-2 py-0.5 rounded transition ${
+          className={`text-xs px-3 py-1.5 rounded transition min-h-[32px] ${
             filter === 'critical' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
@@ -543,7 +555,7 @@ function LowStock() {
         {filter !== 'all' && (
           <button
             onClick={() => setFilter('all')}
-            className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+            className="text-xs text-gray-400 hover:text-gray-600 underline min-h-[32px] px-1"
           >
             clear
           </button>
@@ -551,42 +563,42 @@ function LowStock() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr className="text-left text-gray-500 font-medium">
-              <th className="p-2">Product</th>
-              <th className="p-2">Current Stock</th>
-              <th className="p-2">Reorder Level</th>
-              <th className="p-2">Status</th>
-              <th className="p-2">Action</th>
+              <th className="p-2.5 text-xs whitespace-nowrap">Product</th>
+              <th className="p-2.5 text-xs whitespace-nowrap">Current Stock</th>
+              <th className="p-2.5 text-xs whitespace-nowrap">Reorder Level</th>
+              <th className="p-2.5 text-xs whitespace-nowrap">Status</th>
+              <th className="p-2.5 text-xs whitespace-nowrap">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredItems.map(i => {
               const isCritical = i.currentUnits === 0;
               const isLow = i.currentUnits <= i.reorderLevel && i.currentUnits > 0;
-              
+
               let statusText = 'Low';
               let statusColor = 'bg-gray-100 text-gray-600';
               if (isCritical) {
                 statusText = 'Critical';
                 statusColor = 'bg-gray-200 text-gray-700';
               }
-              
+
               return (
                 <tr key={i.id} className="hover:bg-gray-50/60 transition">
-                  <td className="p-2 font-medium text-gray-700">{i.name}</td>
-                  <td className={`p-2 font-medium ${isCritical ? 'text-gray-500' : isLow ? 'text-gray-700' : 'text-gray-700'}`}>
+                  <td className="p-2.5 font-medium text-gray-700 whitespace-nowrap">{i.name}</td>
+                  <td className={`p-2.5 font-medium whitespace-nowrap ${isCritical ? 'text-gray-500' : isLow ? 'text-gray-700' : 'text-gray-700'}`}>
                     {i.currentUnits} units
                   </td>
-                  <td className="p-2 text-gray-500">{i.reorderLevel} units</td>
-                  <td className="p-2">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusColor}`}>
+                  <td className="p-2.5 text-gray-500 whitespace-nowrap">{i.reorderLevel} units</td>
+                  <td className="p-2.5 whitespace-nowrap">
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusColor}`}>
                       {statusText}
                     </span>
                   </td>
-                  <td className="p-2">
-                    <button className="text-[10px] text-gray-500 hover:text-gray-700 underline">
+                  <td className="p-2.5 whitespace-nowrap">
+                    <button className="text-xs text-gray-500 hover:text-gray-700 underline min-h-[36px] px-1">
                       restock
                     </button>
                   </td>

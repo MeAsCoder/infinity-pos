@@ -1,4 +1,13 @@
-// ShiftScreen.jsx - Fully updated with real selling units from API
+// ShiftScreen.jsx - Mobile Responsive (usability pass)
+// Fixes vs. previous version:
+// 1. DebtModal had no height cap/scroll — could run off-screen with the
+//    keyboard up. Now capped at 85vh with its own scroll.
+// 2. Stock-count rows used near-unreadable text (8-10px) and sub-30px tap
+//    targets for the +1/0 quick buttons — technically fit the screen but
+//    were hard to read/tap. Restructured to wrap with 16px+ text and
+//    36-44px touch targets.
+// 3. Several numeric inputs were under 16px, which makes iOS Safari
+//    auto-zoom on focus. Bumped to text-base throughout.
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -6,13 +15,13 @@ import { db, enqueue } from '../db/offlineDb';
 import { api, apiFetch, OfflineError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useSync } from '../context/SyncContext';
-import { 
-  IconAlert, 
-  IconCheck, 
-  IconArrowLeft, 
-  IconClose, 
-  IconCredit, 
-  IconPhone, 
+import {
+  IconAlert,
+  IconCheck,
+  IconArrowLeft,
+  IconClose,
+  IconCredit,
+  IconPhone,
   IconUser,
   IconCash,
   IconReceipt
@@ -80,12 +89,12 @@ export default function ShiftScreen() {
   }
 
   async function handleClosed(result, shiftId) {
-    if (shiftId) { 
-      try { 
-        await db.openTabs.where('shiftId').equals(shiftId).delete(); 
+    if (shiftId) {
+      try {
+        await db.openTabs.where('shiftId').equals(shiftId).delete();
       } catch (e) {
         // Silent fail
-      } 
+      }
     }
     setClosedResult(result);
   }
@@ -101,13 +110,13 @@ export default function ShiftScreen() {
 
   if (closedResult) {
     return (
-      <ShiftClosedSummary 
-        result={closedResult} 
-        onOk={() => { 
-          setClosedResult(null); 
-          setShift(null); 
-          navigate('/pos'); 
-        }} 
+      <ShiftClosedSummary
+        result={closedResult}
+        onOk={() => {
+          setClosedResult(null);
+          setShift(null);
+          navigate('/pos');
+        }}
       />
     );
   }
@@ -120,14 +129,14 @@ export default function ShiftScreen() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <button 
-        onClick={() => navigate('/pos')} 
-        className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-ink-950 mb-4 font-medium"
+    <div className="max-w-4xl mx-auto p-3 sm:p-4">
+      <button
+        onClick={() => navigate('/pos')}
+        className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-ink-950 mb-3 sm:mb-4 font-medium min-h-[40px]"
       >
         <IconArrowLeft className="w-4 h-4" /> Back to POS
       </button>
-      
+
       {report && !report.stocktake ? (
         <StockCountGate
           shift={shift}
@@ -136,13 +145,13 @@ export default function ShiftScreen() {
           }}
         />
       ) : (
-        <EndShiftForm 
-          shift={shift} 
-          report={report} 
-          online={online} 
+        <EndShiftForm
+          shift={shift}
+          report={report}
+          online={online}
           user={user}
-          onClosed={(r) => handleClosed(r, shift.id)} 
-          onManageTabs={() => navigate('/pos', { state: { view: 'tabs' } })} 
+          onClosed={(r) => handleClosed(r, shift.id)}
+          onManageTabs={() => navigate('/pos', { state: { view: 'tabs' } })}
           onRefresh={loadShift}
         />
       )}
@@ -156,26 +165,26 @@ function StartShiftForm({ deviceId, onStarted }) {
   const [err, setErr] = useState('');
 
   async function start() {
-    setErr(''); 
+    setErr('');
     setBusy(true);
     const uuid = crypto.randomUUID();
-    const payload = { 
-      openingFloat: Number(openingFloat) || 0, 
-      deviceId, 
-      clientUuid: uuid 
+    const payload = {
+      openingFloat: Number(openingFloat) || 0,
+      deviceId,
+      clientUuid: uuid
     };
     try {
       let shift;
       if (navigator.onLine) {
         shift = await apiFetch('/api/shifts/start', { method: 'POST', body: payload });
       } else {
-        shift = { 
-          id: `local-${uuid}`, 
-          status: 'OPEN', 
-          opening_float: payload.openingFloat, 
-          started_at: new Date().toISOString(), 
-          _pendingSync: true, 
-          client_uuid: uuid 
+        shift = {
+          id: `local-${uuid}`,
+          status: 'OPEN',
+          opening_float: payload.openingFloat,
+          started_at: new Date().toISOString(),
+          _pendingSync: true,
+          client_uuid: uuid
         };
         await enqueue('SHIFT_START', uuid, payload);
       }
@@ -183,13 +192,13 @@ function StartShiftForm({ deviceId, onStarted }) {
       onStarted(shift);
     } catch (e) {
       if (e instanceof OfflineError) {
-        const shift = { 
-          id: `local-${uuid}`, 
-          status: 'OPEN', 
-          opening_float: payload.openingFloat, 
-          started_at: new Date().toISOString(), 
-          _pendingSync: true, 
-          client_uuid: uuid 
+        const shift = {
+          id: `local-${uuid}`,
+          status: 'OPEN',
+          opening_float: payload.openingFloat,
+          started_at: new Date().toISOString(),
+          _pendingSync: true,
+          client_uuid: uuid
         };
         await enqueue('SHIFT_START', uuid, payload);
         await db.currentShift.put({ id: 1, shift });
@@ -197,40 +206,40 @@ function StartShiftForm({ deviceId, onStarted }) {
       } else {
         setErr(e.message);
       }
-    } finally { 
-      setBusy(false); 
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <div className="max-w-sm mx-auto mt-14 bg-white rounded-2xl shadow-card p-7">
-      <h2 className="font-display text-2xl font-semibold text-ink-950 mb-1">Start Shift</h2>
-      <p className="text-sm text-neutral-500 mb-5">Count your float before you begin.</p>
+    <div className="max-w-sm mx-auto mt-8 sm:mt-14 bg-white rounded-2xl shadow-card p-5 sm:p-7">
+      <h2 className="font-display text-xl sm:text-2xl font-semibold text-ink-950 mb-1">Start Shift</h2>
+      <p className="text-sm text-neutral-500 mb-4 sm:mb-5">Count your float before you begin.</p>
       {err && (
-        <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-4 border border-rose-100">
+        <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-2.5 sm:p-3 mb-3 sm:mb-4 border border-rose-100">
           {err}
         </div>
       )}
       <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
         Opening cash float
       </label>
-      <input 
-        type="number" 
-        value={openingFloat} 
-        onChange={e => setOpeningFloat(e.target.value)} 
+      <input
+        type="number"
+        value={openingFloat}
+        onChange={e => setOpeningFloat(e.target.value)}
         autoFocus
-        className="w-full border border-neutral-200 rounded-xl px-4 py-3.5 text-lg mb-5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
-        placeholder="0" 
+        className="w-full border border-neutral-200 rounded-xl px-3 sm:px-4 py-3 text-lg mb-4 sm:mb-5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+        placeholder="0"
       />
-      <button 
-        disabled={busy} 
-        onClick={start} 
-        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-50 transition shadow-soft"
+      <button
+        disabled={busy}
+        onClick={start}
+        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-50 transition shadow-soft text-base min-h-[48px]"
       >
         {busy ? 'Starting…' : 'Start Shift'}
       </button>
       {!navigator.onLine && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 mt-3.5">
+        <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 mt-3 text-center">
           Offline — the shift will start locally and sync once you're back online.
         </p>
       )}
@@ -239,7 +248,7 @@ function StartShiftForm({ deviceId, onStarted }) {
 }
 
 // ============================================================================
-// STOCK COUNT GATE - WITH REAL SELLING UNITS FROM API
+// STOCK COUNT GATE
 // ============================================================================
 function StockCountGate({ shift, onSubmitted }) {
   const allProducts = useLiveQuery(() => db.products.toArray(), [], null);
@@ -259,19 +268,14 @@ function StockCountGate({ shift, onSubmitted }) {
 
   const trackedProducts = useMemo(() => (allProducts || []).filter(p => p.trackInventory), [allProducts]);
 
-  // ============================================================================
-  // FIXED: Use the product's ACTUAL selling units from the server,
-  // not a guess based on volume_ml. product.sellingUnits comes straight
-  // from the products API.
-  // ============================================================================
   const getAvailableUnits = (product) => {
     return (product.sellingUnits || [])
       .filter(u => u.active !== false)
       .sort((a, b) => b.volumeMl - a.volumeMl)
-      .map(u => ({ 
-        id: u.id,           // Use the real selling_unit_id
-        label: u.name,      // Use the real unit name
-        ml: u.volumeMl,     // Use the real volume
+      .map(u => ({
+        id: u.id,
+        label: u.name,
+        ml: u.volumeMl,
         sortOrder: u.sortOrder || 0
       }));
   };
@@ -282,7 +286,6 @@ function StockCountGate({ shift, onSubmitted }) {
     return trackedProducts.filter(p => p.name.toLowerCase().includes(q) || (p.brand || '').toLowerCase().includes(q));
   }, [trackedProducts, search]);
 
-  // Count a product as counted if ANY unit type has been touched
   const countedCount = trackedProducts.filter(p => {
     const units = getAvailableUnits(p);
     return units.some(unit => {
@@ -291,16 +294,14 @@ function StockCountGate({ shift, onSubmitted }) {
       return count !== undefined && count !== '';
     });
   }).length;
-  
+
   const allCounted = trackedProducts.length === 0 || countedCount === trackedProducts.length;
 
-  // Get count for a specific unit type
   const getUnitCount = (productId, unitId) => {
     const key = `${productId}-${unitId}`;
     return counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : 0;
   };
 
-  // Get total ml for a product
   const getTotalMl = (product) => {
     const units = getAvailableUnits(product);
     let total = 0;
@@ -311,7 +312,6 @@ function StockCountGate({ shift, onSubmitted }) {
     return total;
   };
 
-  // Check if any unit for this product has been counted
   const isProductCounted = (product) => {
     const units = getAvailableUnits(product);
     return units.some(unit => {
@@ -329,34 +329,33 @@ function StockCountGate({ shift, onSubmitted }) {
     setErr('');
     setBusy(true);
 
-    // Build items with proper unit information using real selling_unit_id
     const items = trackedProducts.map(p => {
       const units = getAvailableUnits(p);
       const unitCounts = units.map(unit => {
         const key = `${p.id}-${unit.id}`;
         const count = counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : 0;
-        return { 
-          sellingUnitId: unit.id,  // Use the real selling_unit_id
-          count: count 
+        return {
+          sellingUnitId: unit.id,
+          count: count
         };
       });
-      return { 
-        productId: p.id, 
-        productName: p.name, 
-        unitCounts  // Server will compute physicalStockMl from this
+      return {
+        productId: p.id,
+        productName: p.name,
+        unitCounts
       };
     });
 
-    const payload = { 
+    const payload = {
       items,
-      shiftId: shift.id 
+      shiftId: shift.id
     };
 
     try {
       if (navigator.onLine) {
-        const result = await apiFetch(`/api/shifts/${shift.id}/stocktake`, { 
-          method: 'POST', 
-          body: payload 
+        const result = await apiFetch(`/api/shifts/${shift.id}/stocktake`, {
+          method: 'POST',
+          body: payload
         });
         setSubmittedResult(result);
       } else {
@@ -372,15 +371,15 @@ function StockCountGate({ shift, onSubmitted }) {
 
   if (submittedResult) {
     return (
-      <div className="bg-white rounded-2xl shadow-card p-6 sm:p-7 text-center">
-        <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center mb-4 ${
+      <div className="bg-white rounded-2xl shadow-card p-4 sm:p-6 text-center">
+        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full mx-auto flex items-center justify-center mb-3 sm:mb-4 ${
           submittedResult.pendingSync || submittedResult.flagged ? 'bg-amber-100' : 'bg-emerald-100'
         }`}>
           {submittedResult.pendingSync || submittedResult.flagged ?
-            <IconAlert className="w-6 h-6 text-amber-600" /> :
-            <IconCheck className="w-6 h-6 text-emerald-600" />}
+            <IconAlert className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" /> :
+            <IconCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />}
         </div>
-        <h2 className="font-display text-xl font-semibold text-ink-950 mb-2">Stock Count Submitted</h2>
+        <h2 className="font-display text-lg sm:text-xl font-semibold text-ink-950 mb-2">Stock Count Submitted</h2>
         {submittedResult.pendingSync ? (
           <p className="text-neutral-500 text-sm">Saved offline — will sync and be reviewed once this device is back online.</p>
         ) : (
@@ -392,7 +391,7 @@ function StockCountGate({ shift, onSubmitted }) {
                 : ' No significant differences found.'}
             </p>
             {submittedResult.topDiscrepancies?.length > 0 && (
-              <div className="text-left bg-neutral-50 rounded-xl p-4 space-y-1.5 text-sm">
+              <div className="text-left bg-neutral-50 rounded-xl p-3 sm:p-4 space-y-1 text-sm">
                 <p className="text-xs text-neutral-400 uppercase tracking-wide font-semibold mb-1">Largest differences</p>
                 {submittedResult.topDiscrepancies.map((d, i) => (
                   <div key={i} className="flex justify-between">
@@ -408,7 +407,7 @@ function StockCountGate({ shift, onSubmitted }) {
         )}
         <button
           onClick={() => onSubmitted(submittedResult)}
-          className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl mt-6 transition"
+          className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl mt-4 sm:mt-6 transition text-base min-h-[48px]"
         >
           Continue to Close Shift
         </button>
@@ -417,9 +416,9 @@ function StockCountGate({ shift, onSubmitted }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-card p-6 sm:p-7">
-      <div className="mb-4">
-        <h2 className="font-display text-2xl font-semibold text-ink-950 flex items-center gap-2">
+    <div className="bg-white rounded-2xl shadow-card p-3 sm:p-6">
+      <div className="mb-3 sm:mb-4">
+        <h2 className="font-display text-xl sm:text-2xl font-semibold text-ink-950 flex items-center gap-2">
           <IconReceipt className="w-5 h-5" /> Count Stock
         </h2>
         <p className="text-sm text-neutral-500 mt-1">
@@ -431,12 +430,12 @@ function StockCountGate({ shift, onSubmitted }) {
         </p>
       </div>
 
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search product…"
-          className="flex-1 border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+          className="flex-1 border border-neutral-200 rounded-xl px-3 sm:px-4 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
         />
         <span className="text-sm font-medium text-neutral-500 whitespace-nowrap">
           {countedCount}/{trackedProducts.length} counted
@@ -444,20 +443,20 @@ function StockCountGate({ shift, onSubmitted }) {
       </div>
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-3 border border-rose-100">
+        <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-2.5 mb-2 sm:mb-3 border border-rose-100">
           {err}
         </div>
       )}
 
-      <div className="border border-neutral-200 rounded-xl divide-y divide-neutral-100 max-h-[50vh] overflow-y-auto mb-4">
+      <div className="border border-neutral-200 rounded-xl divide-y divide-neutral-100 max-h-[55vh] overflow-y-auto mb-3 sm:mb-4">
         {filtered.map(p => {
           const availableUnits = getAvailableUnits(p);
           const totalMl = getTotalMl(p);
           const productCounted = isProductCounted(p);
-          
+
           return (
-            <div key={p.id} className={`px-4 py-3 ${productCounted ? 'bg-green-50/30' : ''}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div key={p.id} className={`px-3 sm:px-4 py-3 ${productCounted ? 'bg-green-50/30' : ''}`}>
+              <div className="flex flex-wrap items-center justify-between gap-1 sm:gap-2 mb-2">
                 <div>
                   <div className="text-sm font-medium text-ink-950">{p.name}</div>
                   <div className="text-xs text-neutral-400">
@@ -472,18 +471,17 @@ function StockCountGate({ shift, onSubmitted }) {
                   )}
                 </div>
               </div>
-              
-              {/* Unit type input rows - using real selling_unit_id */}
-              <div className="space-y-1.5">
+
+              <div className="space-y-2">
                 {availableUnits.map((unit) => {
                   const key = `${p.id}-${unit.id}`;
                   const count = counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : '';
                   const unitTotalMl = count !== '' ? count * unit.ml : 0;
                   const isCounted = counts[key] !== undefined && counts[key] !== '';
-                  
+
                   return (
-                    <div key={unit.id} className="flex items-center gap-2 pl-2">
-                      <div className={`w-24 text-xs ${isCounted ? 'text-neutral-700' : 'text-neutral-500'}`}>
+                    <div key={unit.id} className="flex flex-wrap items-center gap-2">
+                      <div className={`w-16 text-xs shrink-0 ${isCounted ? 'text-neutral-700 font-medium' : 'text-neutral-500'}`}>
                         {unit.label}:
                       </div>
                       <input
@@ -498,21 +496,20 @@ function StockCountGate({ shift, onSubmitted }) {
                           }
                         }}
                         placeholder="0"
-                        className={`w-16 border border-neutral-200 rounded-lg px-2 py-1 text-right focus:border-brand focus:ring-1 focus:ring-brand outline-none transition ${
+                        className={`w-16 border border-neutral-200 rounded-lg px-2 py-2 text-right text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition ${
                           isCounted ? 'bg-green-50 border-green-300' : ''
                         }`}
                       />
-                      <span className="text-[10px] text-neutral-400">
+                      <span className="text-xs text-neutral-400 shrink-0">
                         × {unit.ml}ml = {unitTotalMl}ml
                       </span>
-                      {/* Quick add buttons */}
-                      <div className="flex gap-0.5 ml-1">
+                      <div className="flex gap-1.5 ml-auto">
                         <button
                           onClick={() => {
                             const current = counts[key] !== undefined && counts[key] !== '' ? Number(counts[key]) : 0;
                             setCounts(c => ({ ...c, [key]: String(current + 1) }));
                           }}
-                          className="text-[10px] bg-neutral-100 hover:bg-neutral-200 px-1.5 py-0.5 rounded"
+                          className="text-xs font-medium bg-neutral-100 hover:bg-neutral-200 px-3 py-2 rounded-lg min-h-[36px] min-w-[36px]"
                         >
                           +1
                         </button>
@@ -520,7 +517,7 @@ function StockCountGate({ shift, onSubmitted }) {
                           onClick={() => {
                             setCounts(c => ({ ...c, [key]: '0' }));
                           }}
-                          className="text-[10px] bg-neutral-100 hover:bg-neutral-200 px-1.5 py-0.5 rounded text-neutral-500"
+                          className="text-xs font-medium bg-neutral-100 hover:bg-neutral-200 px-3 py-2 rounded-lg text-neutral-500 min-h-[36px] min-w-[36px]"
                         >
                           0
                         </button>
@@ -529,13 +526,11 @@ function StockCountGate({ shift, onSubmitted }) {
                   );
                 })}
               </div>
-              
-              {/* Quick preset buttons - generically built from available units */}
+
               {availableUnits.length > 1 && (
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  <span className="text-[10px] text-neutral-400">Quick:</span>
-                  {availableUnits.map((unit, idx) => {
-                    // Create quick buttons for common presets
+                <div className="mt-2.5 flex gap-1.5 flex-wrap">
+                  <span className="text-xs text-neutral-400 self-center">Quick:</span>
+                  {availableUnits.map((unit) => {
                     if (unit.label.toLowerCase().includes('half')) {
                       return (
                         <button
@@ -543,7 +538,7 @@ function StockCountGate({ shift, onSubmitted }) {
                           onClick={() => {
                             setCounts(c => ({ ...c, [`${p.id}-${unit.id}`]: '1' }));
                           }}
-                          className="text-[10px] bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded transition"
+                          className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition min-h-[32px]"
                         >
                           1 {unit.label}
                         </button>
@@ -556,7 +551,7 @@ function StockCountGate({ shift, onSubmitted }) {
                           onClick={() => {
                             setCounts(c => ({ ...c, [`${p.id}-${unit.id}`]: '20' }));
                           }}
-                          className="text-[10px] bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded transition"
+                          className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition min-h-[32px]"
                         >
                           20 {unit.label}s
                         </button>
@@ -566,14 +561,13 @@ function StockCountGate({ shift, onSubmitted }) {
                   })}
                   <button
                     onClick={() => {
-                      // Set all units to 0 (out of stock)
                       const newCounts = {};
                       availableUnits.forEach(u => {
                         newCounts[`${p.id}-${u.id}`] = '0';
                       });
                       setCounts(c => ({ ...c, ...newCounts }));
                     }}
-                    className="text-[10px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2 py-0.5 rounded transition"
+                    className="text-xs bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 px-2.5 py-1.5 rounded-lg transition min-h-[32px]"
                   >
                     Out of Stock
                   </button>
@@ -583,22 +577,22 @@ function StockCountGate({ shift, onSubmitted }) {
           );
         })}
         {filtered.length === 0 && (
-          <div className="p-6 text-center text-neutral-400 text-sm">No matching products.</div>
+          <div className="p-4 sm:p-6 text-center text-neutral-400 text-sm">No matching products.</div>
         )}
         {trackedProducts.length === 0 && (
-          <div className="p-6 text-center text-neutral-400 text-sm">No tracked-inventory products to count.</div>
+          <div className="p-4 sm:p-6 text-center text-neutral-400 text-sm">No tracked-inventory products to count.</div>
         )}
       </div>
 
       <button
         disabled={busy || !allCounted}
         onClick={submit}
-        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-40 transition shadow-soft"
+        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-40 transition shadow-soft text-base min-h-[48px]"
       >
         {busy ? 'Submitting…' : allCounted ? 'Submit Stock Count' : `Count all products to continue (${countedCount}/${trackedProducts.length})`}
       </button>
       {!navigator.onLine && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 mt-3 text-center">
+        <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 mt-2 sm:mt-3 text-center">
           Offline — this will sync automatically once you're back online.
         </p>
       )}
@@ -607,7 +601,7 @@ function StockCountGate({ shift, onSubmitted }) {
 }
 
 // ============================================================================
-// END SHIFT FORM - WITH CASH COUNTING FIELDS
+// END SHIFT FORM
 // ============================================================================
 function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onRefresh }) {
   const [actualCash, setActualCash] = useState('');
@@ -618,9 +612,7 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
   const [err, setErr] = useState('');
   const [openTabsBlocking, setOpenTabsBlocking] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showPatternModal, setShowPatternModal] = useState(false);
-  const [patterns, setPatterns] = useState([]);
-  
+
   const [showDebtModal, setShowDebtModal] = useState(false);
   const [selectedTab, setSelectedTab] = useState(null);
   const [debtCustomer, setDebtCustomer] = useState({
@@ -660,7 +652,7 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
 
     try {
       const saleId = selectedTab.localId || selectedTab.id;
-      
+
       const payload = {
         customerName: debtCustomer.name.trim(),
         customerPhone: debtCustomer.phone.trim() || undefined,
@@ -671,9 +663,9 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
       };
 
       if (navigator.onLine) {
-        await apiFetch(`/api/sales/${saleId}/debt`, { 
-          method: 'POST', 
-          body: payload 
+        await apiFetch(`/api/sales/${saleId}/debt`, {
+          method: 'POST',
+          body: payload
         });
       } else {
         await enqueue('RECORD_DEBT', crypto.randomUUID(), { ...payload, saleId });
@@ -681,16 +673,16 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
 
       await db.openTabs.where('localId').equals(saleId).delete();
       await refreshData();
-      
+
       setDebtSuccess(`Debt of ${money(selectedTab.total)} recorded for ${debtCustomer.name}`);
-      
+
       setTimeout(() => {
         setShowDebtModal(false);
         setSelectedTab(null);
         setDebtCustomer({ name: '', phone: '', notes: '' });
         setDebtSuccess('');
       }, 1500);
-      
+
     } catch (e) {
       console.error('Debt recording error:', e);
       setErr(e.message || 'Failed to record debt');
@@ -702,52 +694,52 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
   async function submit() {
     setErr('');
     setOpenTabsBlocking(null);
-    
+
     if (openTabsBlocking && openTabsBlocking.length > 0) {
       setErr('Please settle or record all open tabs as debt before closing.');
       return;
     }
-    
+
     if (actualCash === '') {
       setErr('Please count and enter the physical cash in the drawer.');
       return;
     }
-    
+
     await closeShift();
   }
 
   async function closeShift() {
     setBusy(true);
-    const payload = { 
+    const payload = {
       shiftId: shift.id,
       actualCash: Number(actualCash),
       actualMobile: Number(actualMobile) || 0,
       actualCard: Number(actualCard) || 0,
       notes: notes || 'No notes provided'
     };
-    
+
     try {
       let result;
       if (navigator.onLine) {
         result = await apiFetch(`/api/shifts/${shift.id}/end`, { method: 'POST', body: payload });
       } else {
         await enqueue('SHIFT_END', crypto.randomUUID(), payload);
-        result = { 
-          pendingSync: true, 
-          message: 'Shift closure saved offline. Will reconcile once synced.' 
+        result = {
+          pendingSync: true,
+          message: 'Shift closure saved offline. Will reconcile once synced.'
         };
       }
       await db.currentShift.delete(1);
       onClosed(result);
     } catch (e) {
       console.error('Shift end error:', e);
-      
+
       if (e instanceof OfflineError) {
         await enqueue('SHIFT_END', crypto.randomUUID(), payload);
         await db.currentShift.delete(1);
-        onClosed({ 
-          pendingSync: true, 
-          message: 'Saved offline. Shift closure will be processed once this device syncs.' 
+        onClosed({
+          pendingSync: true,
+          message: 'Saved offline. Shift closure will be processed once this device syncs.'
         });
       } else if (e.status === 409 && e.data?.openTabs) {
         setOpenTabsBlocking(e.data.openTabs);
@@ -757,15 +749,15 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
       } else {
         setErr(e.message || 'Failed to close shift');
       }
-    } finally { 
-      setBusy(false); 
+    } finally {
+      setBusy(false);
     }
   }
 
   useEffect(() => {
     async function fetchOpenTabs() {
       if (!shift?.id) return;
-      
+
       try {
         const tabs = await api.openTabs(shift.id);
         if (tabs && tabs.length > 0) {
@@ -775,50 +767,50 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         // Silent fail - might be offline
       }
     }
-    
+
     fetchOpenTabs();
   }, [shift]);
 
   return (
-    <div className="bg-white rounded-2xl shadow-card p-6 sm:p-7">
-      <div className="flex justify-between items-start mb-4">
+    <div className="bg-white rounded-2xl shadow-card p-3 sm:p-6">
+      <div className="flex flex-wrap justify-between items-start gap-2 mb-3 sm:mb-4">
         <div>
-          <h2 className="font-display text-2xl font-semibold text-ink-950">
+          <h2 className="font-display text-lg sm:text-2xl font-semibold text-ink-950">
             Shift #{shift.id}
           </h2>
-          <p className="text-sm text-neutral-500">
+          <p className="text-xs sm:text-sm text-neutral-500">
             Started {new Date(shift.started_at).toLocaleString()}
             {shift._pendingSync && ' (pending sync)'}
           </p>
         </div>
-        <button 
-          onClick={refreshData} 
+        <button
+          onClick={refreshData}
           disabled={isRefreshing}
-          className="text-sm text-brand hover:text-brand-dark font-medium disabled:opacity-50"
+          className="text-sm text-brand hover:text-brand-dark font-medium disabled:opacity-50 min-h-[36px]"
         >
           {isRefreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
       {openTabsBlocking && openTabsBlocking.length > 0 && (
-        <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 mb-5">
+        <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 sm:p-4 mb-4 sm:mb-5">
           <div className="flex items-center gap-2 text-amber-800 font-semibold text-sm mb-2">
             <IconAlert className="w-4 h-4" /> {openTabsBlocking.length} bill(s) still open
           </div>
-          <p className="text-xs text-amber-700 mb-3">
+          <p className="text-xs text-amber-700 mb-2 sm:mb-3">
             You must either settle these bills or record them as debt before closing the shift.
           </p>
-          <div className="space-y-2 mb-3 max-h-60 overflow-y-auto">
+          <div className="space-y-2 mb-2 sm:mb-3 max-h-60 overflow-y-auto">
             {openTabsBlocking.map(t => {
               const tabId = t.localId || t.id;
               return (
-                <div key={tabId} className="flex justify-between items-center text-sm bg-white rounded-lg px-3 py-2">
+                <div key={tabId} className="flex flex-wrap justify-between items-center gap-2 text-sm bg-white rounded-lg px-3 py-2">
                   <div>
                     <span className="text-ink-950 font-medium">{t.tab_label || t.receipt_number || `Bill #${tabId}`}</span>
                     <span className="text-neutral-400 text-xs ml-2">{t.items?.length || 0} items</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold">{money(t.total || 0)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">{money(t.total || 0)}</span>
                     <button
                       onClick={() => {
                         const selected = { ...t, localId: tabId };
@@ -827,7 +819,7 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
                         setErr('');
                         setDebtSuccess('');
                       }}
-                      className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded-lg transition"
+                      className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-lg transition min-h-[36px]"
                     >
                       Record as Debt
                     </button>
@@ -835,7 +827,7 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
                       onClick={() => {
                         onManageTabs();
                       }}
-                      className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-1 rounded-lg transition"
+                      className="text-xs bg-brand hover:bg-brand-dark text-white px-3 py-2 rounded-lg transition min-h-[36px]"
                     >
                       Settle
                     </button>
@@ -844,9 +836,9 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
               );
             })}
           </div>
-          <button 
-            onClick={onManageTabs} 
-            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold py-2.5 rounded-lg transition"
+          <button
+            onClick={onManageTabs}
+            className="w-full bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold py-2.5 rounded-lg transition min-h-[44px]"
           >
             Go to Open Bills
           </button>
@@ -854,7 +846,7 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
       )}
 
       {totals && (
-        <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-5 text-sm">
           <Stat label="Transactions" value={totals.count} />
           <Stat label="Revenue" value={money(totals.revenue)} />
           <Stat label="Opening float" value={money(shift.opening_float)} />
@@ -864,84 +856,84 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         </div>
       )}
       {!report && (
-        <div className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 mb-5">
+        <div className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2.5 mb-4 sm:mb-5">
           {online ? 'Loading shift report...' : 'Live totals unavailable offline — figures will be finalized once this device is back online.'}
         </div>
       )}
 
-      <div className="space-y-4 mb-5">
+      <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-5">
         <div className="border-b border-neutral-200 pb-2">
-          <h3 className="font-semibold text-ink-950 flex items-center gap-2">
+          <h3 className="font-semibold text-ink-950 flex items-center gap-2 text-base">
             <IconCash className="w-4 h-4" /> Count Cash
           </h3>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Enter the physical cash, mobile money, and card payments you received. 
+            Enter the physical cash, mobile money, and card payments you received.
             The system will calculate the expected amount after you submit.
           </p>
         </div>
-        
+
         <div>
-          <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+          <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
             Physical cash counted <span className="text-rose-500">*</span>
           </label>
-          <input 
-            type="number" 
-            value={actualCash} 
-            onChange={e => setActualCash(e.target.value)} 
-            autoFocus 
-            className="w-full border border-neutral-200 rounded-xl px-4 py-3.5 text-lg focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
+          <input
+            type="number"
+            value={actualCash}
+            onChange={e => setActualCash(e.target.value)}
+            autoFocus
+            className="w-full border border-neutral-200 rounded-xl px-3 sm:px-4 py-3 text-lg focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
             placeholder="0.00"
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div>
-            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
               Mobile money received
             </label>
-            <input 
-              type="number" 
-              value={actualMobile} 
-              onChange={e => setActualMobile(e.target.value)} 
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 focus:border-brand outline-none transition" 
+            <input
+              type="number"
+              value={actualMobile}
+              onChange={e => setActualMobile(e.target.value)}
+              className="w-full border border-neutral-200 rounded-xl px-2 sm:px-3 py-2.5 text-base focus:border-brand outline-none transition"
               placeholder="0.00"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+            <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
               Card / PDQ received
             </label>
-            <input 
-              type="number" 
-              value={actualCard} 
-              onChange={e => setActualCard(e.target.value)} 
-              className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 focus:border-brand outline-none transition" 
+            <input
+              type="number"
+              value={actualCard}
+              onChange={e => setActualCard(e.target.value)}
+              className="w-full border border-neutral-200 rounded-xl px-2 sm:px-3 py-2.5 text-base focus:border-brand outline-none transition"
               placeholder="0.00"
             />
           </div>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+          <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
             Notes (optional)
           </label>
-          <textarea 
-            value={notes} 
-            onChange={e => setNotes(e.target.value)} 
-            className="w-full border border-neutral-200 rounded-xl px-3 py-2.5 focus:border-brand outline-none transition" 
-            rows={2} 
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            className="w-full border border-neutral-200 rounded-xl px-2 sm:px-3 py-2.5 text-base focus:border-brand outline-none transition"
+            rows={2}
             placeholder="Any issues, discrepancies, or notes about this shift..."
           />
         </div>
       </div>
 
       {err && (
-        <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-4 border border-rose-100">
+        <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-2.5 sm:p-3 mb-3 sm:mb-4 border border-rose-100">
           {err}
         </div>
       )}
 
-      <div className="bg-neutral-50 rounded-xl p-4 mb-5 text-sm">
+      <div className="bg-neutral-50 rounded-xl p-3 sm:p-4 mb-4 sm:mb-5 text-sm">
         <p className="text-neutral-600">
-          <span className="font-medium">📌 Note:</span> 
+          <span className="font-medium">📌 Note:</span>
           Expected cash and any shortage/surplus are calculated automatically from your recorded sales.
           {openTabsBlocking && openTabsBlocking.length > 0 && (
             <span className="block mt-2 text-amber-700">
@@ -951,14 +943,14 @@ function EndShiftForm({ shift, report, online, user, onClosed, onManageTabs, onR
         </p>
       </div>
 
-      <button 
-        disabled={busy || (openTabsBlocking && openTabsBlocking.length > 0)} 
-        onClick={submit} 
-        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-50 transition shadow-soft"
+      <button
+        disabled={busy || (openTabsBlocking && openTabsBlocking.length > 0)}
+        onClick={submit}
+        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-50 transition shadow-soft text-base min-h-[48px]"
       >
         {busy ? 'Processing...' : 'Close Shift'}
       </button>
-      
+
       {openTabsBlocking && openTabsBlocking.length > 0 && (
         <p className="text-xs text-amber-700 text-center mt-2">
           Please settle all open bills or record them as debt before closing the shift.
@@ -1010,10 +1002,15 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-start mb-4">
+      {/* max-h + overflow-y-auto so this never runs off-screen with the
+          keyboard open or a long customer search result list showing */}
+      <div
+        className="bg-white rounded-2xl w-full max-w-sm sm:max-w-md max-h-[85vh] overflow-y-auto p-4 sm:p-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex justify-between items-start mb-3 sm:mb-4">
           <div>
-            <h3 className="font-display text-xl font-semibold text-ink-950 flex items-center gap-2">
+            <h3 className="font-display text-lg sm:text-xl font-semibold text-ink-950 flex items-center gap-2">
               <IconCredit className="w-5 h-5 text-amber-600" />
               Record as Debt
             </h3>
@@ -1021,13 +1018,13 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
               {tab.tab_label || tab.receipt_number || `Bill #${tab.localId || tab.id}`} — {money(tab.total || 0)}
             </p>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 w-9 h-9 flex items-center justify-center shrink-0">
             <IconClose className="w-5 h-5" />
           </button>
         </div>
 
         {success ? (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 sm:p-4 mb-3 sm:mb-4">
             <div className="flex items-center gap-2 text-emerald-700">
               <IconCheck className="w-5 h-5" />
               <span className="text-sm font-medium">{success}</span>
@@ -1035,7 +1032,7 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
           </div>
         ) : (
           <>
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 sm:p-3 mb-3 sm:mb-4">
               <p className="text-xs text-amber-800">
                 <span className="font-semibold">⚠️ Important:</span> Recording this as debt means:
               </p>
@@ -1047,43 +1044,43 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
             </div>
 
             {error && (
-              <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-3 mb-4 border border-rose-100">
+              <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-2.5 sm:p-3 mb-3 sm:mb-4 border border-rose-100">
                 {error}
               </div>
             )}
 
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+                <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
                   Customer <span className="text-rose-500">*</span>
                 </label>
 
                 {customer.name && !showManualEntry ? (
                   <div className="bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm">
-                        <IconUser className="w-4 h-4 text-neutral-400" />
-                        <span className="font-medium text-ink-950">{customer.name}</span>
-                        {customer.phone && <span className="text-neutral-400 text-xs">{customer.phone}</span>}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm min-w-0">
+                        <IconUser className="w-4 h-4 text-neutral-400 shrink-0" />
+                        <span className="font-medium text-ink-950 truncate">{customer.name}</span>
+                        {customer.phone && <span className="text-neutral-400 text-xs shrink-0">{customer.phone}</span>}
                       </div>
                       <button
                         onClick={() => {
                           setCustomer(c => ({ ...c, name: '', phone: '' }));
                           setCustomerSearch('');
                         }}
-                        className="text-xs text-neutral-400 hover:text-neutral-600"
+                        className="text-xs text-neutral-400 hover:text-neutral-600 shrink-0"
                       >
                         change
                       </button>
                     </div>
                     {matchedExisting && matchedExisting.balance > 0 && (
-                      <div className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                      <div className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                         <IconAlert className="w-3 h-3" /> Already owes {money(matchedExisting.balance)}
                       </div>
                     )}
                   </div>
                 ) : showManualEntry ? (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     <div className="relative">
                       <IconUser className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
@@ -1091,7 +1088,7 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
                         value={customer.name}
                         onChange={e => setCustomer(c => ({ ...c, name: e.target.value }))}
                         placeholder="e.g. John Doe"
-                        className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-2.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                        className="w-full border border-neutral-200 rounded-xl pl-9 pr-3 sm:pr-4 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                         autoFocus
                       />
                     </div>
@@ -1102,7 +1099,7 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
                         value={customer.phone}
                         onChange={e => setCustomer(c => ({ ...c, phone: e.target.value }))}
                         placeholder="e.g. 0712 345 678"
-                        className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-2.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                        className="w-full border border-neutral-200 rounded-xl pl-9 pr-3 sm:pr-4 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                       />
                     </div>
                     <button
@@ -1110,24 +1107,24 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
                         setCustomer(c => ({ ...c, name: '', phone: '' }));
                         setShowManualEntry(false);
                       }}
-                      className="text-xs text-neutral-400 hover:text-neutral-600"
+                      className="text-xs text-neutral-400 hover:text-neutral-600 py-1 min-h-[32px]"
                     >
                       ← search existing customers instead
                     </button>
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 mb-1">
                       <input
                         value={customerSearch}
                         onChange={e => setCustomerSearch(e.target.value)}
                         placeholder="Search customer by name/phone…"
-                        className="flex-1 border border-neutral-200 rounded-xl px-3 py-2.5 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                        className="flex-1 border border-neutral-200 rounded-xl px-3 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                         autoFocus
                       />
                       <button
                         onClick={() => { setShowManualEntry(true); setCustomerSearch(''); }}
-                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-2.5 rounded-lg transition whitespace-nowrap"
+                        className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-2.5 rounded-lg transition whitespace-nowrap min-h-[40px]"
                       >
                         + New
                       </button>
@@ -1144,10 +1141,10 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
                               setCustomer(cur => ({ ...cur, name: c.name, phone: c.phone || '' }));
                               setCustomerSearch('');
                             }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex justify-between"
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-neutral-50 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-0.5 min-h-[44px]"
                           >
-                            <span>{c.name}</span>
-                            <span className="text-neutral-400 text-xs">
+                            <span className="truncate">{c.name}</span>
+                            <span className="text-neutral-400 text-xs shrink-0">
                               {c.phone || 'no phone'} · owes {money(c.balance || 0)}
                             </span>
                           </button>
@@ -1163,29 +1160,29 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1.5">
+                <label className="block text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
                   Notes (optional)
                 </label>
                 <textarea
                   value={customer.notes}
                   onChange={e => setCustomer(c => ({ ...c, notes: e.target.value }))}
                   placeholder="Any additional details about this customer or the situation..."
-                  className="w-full border border-neutral-200 rounded-xl px-4 py-2.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  className="w-full border border-neutral-200 rounded-xl px-3 sm:px-4 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                   rows={2}
                 />
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex flex-col sm:flex-row gap-2 pt-1 sm:pt-2">
                 <button
                   onClick={onClose}
-                  className="flex-1 border border-neutral-200 rounded-xl py-2.5 text-neutral-600 font-medium hover:bg-neutral-50 transition"
+                  className="flex-1 border border-neutral-200 rounded-xl py-2.5 text-sm text-neutral-600 font-medium hover:bg-neutral-50 transition min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={onConfirm}
                   disabled={busy || !customer.name.trim()}
-                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl py-2.5 transition disabled:opacity-50"
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl py-2.5 text-sm transition disabled:opacity-50 min-h-[44px]"
                 >
                   {busy ? 'Recording...' : 'Record Debt'}
                 </button>
@@ -1204,31 +1201,30 @@ function DebtModal({ tab, customer, setCustomer, onConfirm, onClose, busy, error
 function ShiftClosedSummary({ result, onOk }) {
   const shortage = result.variance < 0 ? -result.variance : 0;
   const surplus = result.variance > 0 ? result.variance : 0;
-  const hasVariance = result.variance !== 0;
-  
+
   return (
-    <div className="max-w-sm mx-auto mt-14 bg-white rounded-2xl shadow-card p-7 text-center">
-      <div className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center mb-4 ${
-        result.pendingSync ? 'bg-amber-100' : shortage > 0 ? 'bg-rose-100' : surplus > 0 ? 'bg-emerald-100' : 'bg-emerald-100'
+    <div className="max-w-sm mx-auto mt-8 sm:mt-14 bg-white rounded-2xl shadow-card p-5 sm:p-7 text-center">
+      <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full mx-auto flex items-center justify-center mb-3 sm:mb-4 ${
+        result.pendingSync ? 'bg-amber-100' : shortage > 0 ? 'bg-rose-100' : 'bg-emerald-100'
       }`}>
-        {result.pendingSync ? 
-          <IconAlert className="w-6 h-6 text-amber-600" /> : 
-          shortage > 0 ? 
-            <IconAlert className="w-6 h-6 text-rose-600" /> : 
-            <IconCheck className="w-6 h-6 text-emerald-600" />
+        {result.pendingSync ?
+          <IconAlert className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" /> :
+          shortage > 0 ?
+            <IconAlert className="w-5 h-5 sm:w-6 sm:h-6 text-rose-600" /> :
+            <IconCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
         }
       </div>
-      <h2 className="font-display text-xl font-semibold text-ink-950 mb-2">Shift Closed</h2>
+      <h2 className="font-display text-lg sm:text-xl font-semibold text-ink-950 mb-2">Shift Closed</h2>
       {result.pendingSync ? (
         <p className="text-neutral-500 text-sm">{result.message}</p>
       ) : (
         <>
-          <p className={`text-sm font-medium mb-4 ${shortage > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-            {shortage > 0 ? `⚠️ Shortage of ${money(shortage)}` : 
-             surplus > 0 ? `✅ Surplus of ${money(surplus)}` : 
+          <p className={`text-sm font-medium mb-3 sm:mb-4 ${shortage > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+            {shortage > 0 ? `⚠️ Shortage of ${money(shortage)}` :
+             surplus > 0 ? `✅ Surplus of ${money(surplus)}` :
              '✅ Perfect balance!'}
           </p>
-          <div className="text-left bg-neutral-50 rounded-xl p-4 space-y-1.5 text-sm mt-3">
+          <div className="text-left bg-neutral-50 rounded-xl p-3 sm:p-4 space-y-1 text-sm mt-3">
             <Row label="Expected Cash" value={money(result.expectedCash)} />
             <Row label="Actual Cash" value={money(result.actualCash)} />
             {shortage > 0 && <Row label="Shortage" value={money(shortage)} bold color="text-rose-600" />}
@@ -1242,9 +1238,9 @@ function ShiftClosedSummary({ result, onOk }) {
           </div>
         </>
       )}
-      <button 
-        onClick={onOk} 
-        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl mt-6 transition"
+      <button
+        onClick={onOk}
+        className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl mt-4 sm:mt-6 transition text-base min-h-[48px]"
       >
         Return to POS
       </button>
@@ -1254,16 +1250,16 @@ function ShiftClosedSummary({ result, onOk }) {
 
 function Stat({ label, value }) {
   return (
-    <div className="bg-neutral-50 rounded-xl p-3">
-      <div className="text-neutral-400 text-xs">{label}</div>
-      <div className="font-semibold text-ink-950 mt-0.5">{value}</div>
+    <div className="bg-neutral-50 rounded-xl p-2.5 sm:p-3">
+      <div className="text-xs text-neutral-400">{label}</div>
+      <div className="text-sm font-semibold text-ink-950 mt-0.5">{value}</div>
     </div>
   );
 }
 
 function Row({ label, value, bold, color }) {
   return (
-    <div className={`flex justify-between ${bold ? 'font-bold' : ''} ${color || ''}`}>
+    <div className={`flex justify-between ${bold ? 'font-bold' : ''} ${color || ''} text-sm`}>
       <span>{label}</span>
       <span>{value}</span>
     </div>

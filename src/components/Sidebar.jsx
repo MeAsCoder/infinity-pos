@@ -1,5 +1,5 @@
-// components/Sidebar.jsx
-import React, { useState } from 'react';
+// src/components/Sidebar.jsx
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Logo, { LogoMark } from './Logo';
@@ -24,7 +24,7 @@ const NAV = [
   { to: '/admin/audit', label: 'Audit Log', icon: IconShield, perm: 'audit.view' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ children }) {
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -34,9 +34,9 @@ export default function Sidebar() {
 
   const visibleNav = NAV.filter(item => !item.perm || hasPermission(item.perm));
   
-  // Find current page label for mobile header
   const currentPage = visibleNav.find(i => i.to && location.pathname === i.to);
   const currentLabel = currentPage?.label || 'Infinity';
+  const isPOS = location.pathname === '/pos';
 
   async function handleLogout() {
     await logout();
@@ -45,15 +45,23 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile top bar */}
-      <div className="lg:hidden sticky top-0 z-30 bg-ink-950 text-white flex items-center justify-between px-3 h-14 shadow-soft">
-        <button onClick={() => setOpen(true)} className="p-2 -ml-2 text-white/80 hover:text-white" aria-label="Open menu">
-          <IconMenu className="w-6 h-6" />
+      {/* Mobile top bar - ULTRA COMPACT */}
+      <div className="lg:hidden sticky top-0 z-30 bg-ink-950 text-white flex items-center justify-between px-2 h-10 shadow-soft">
+        <button 
+          onClick={() => setOpen(true)} 
+          className="p-1.5 -ml-1.5 text-white/80 hover:text-white" 
+          aria-label="Open menu"
+        >
+          <IconMenu className="w-5 h-5" />
         </button>
-        <div className="flex items-center gap-2">
-          <LogoMark className="w-6 h-6" />
-          <span className="font-display text-sm tracking-wide">{currentLabel}</span>
+        
+        <div className="flex items-center gap-1.5">
+          <LogoMark className="w-5 h-5" />
+          <span className="hidden sm:inline font-display text-xs tracking-wide text-white/80">
+            {isPOS ? 'POS' : currentLabel}
+          </span>
         </div>
+        
         <SyncBadge compact />
       </div>
 
@@ -66,17 +74,17 @@ export default function Sidebar() {
         transition-transform duration-200 ease-out
         ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0
       `}>
-        <div className="flex items-center justify-between px-5 pt-6 pb-5 border-b border-white/10">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/10">
           <Logo />
           <button onClick={() => setOpen(false)} className="lg:hidden text-white/60 hover:text-white p-1">
             <IconClose className="w-5 h-5" />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
           {visibleNav.map((item, idx) => {
             if (item.section) {
-              return <div key={item.section + idx} className="px-3 pt-5 pb-2 text-[10px] font-semibold tracking-[0.18em] text-white/35 uppercase">{item.section}</div>;
+              return <div key={item.section + idx} className="px-3 pt-4 pb-1.5 text-[10px] font-semibold tracking-[0.18em] text-white/35 uppercase">{item.section}</div>;
             }
             const Icon = item.icon;
             const isActive = location.pathname === item.to;
@@ -87,7 +95,7 @@ export default function Sidebar() {
                 to={item.to}
                 onClick={() => setOpen(false)}
                 className={({ isActive: navActive }) => `
-                  group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative
+                  group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative
                   ${(navActive || isActive) ? 'bg-white/[0.08] text-white' : 'text-white/60 hover:text-white hover:bg-white/[0.04]'}
                 `}
               >
@@ -106,12 +114,12 @@ export default function Sidebar() {
           })}
         </nav>
 
-        <div className="px-3 py-4 border-t border-white/10">
-          <div className="px-2 pb-3 hidden lg:block">
+        <div className="px-3 py-3 border-t border-white/10">
+          <div className="px-2 pb-2 hidden lg:block">
             <SyncBadge />
           </div>
-          <div className="flex items-center gap-3 px-2 py-2 rounded-lg bg-white/[0.04]">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gold-500 to-brand flex items-center justify-center text-xs font-bold shrink-0">
+          <div className="flex items-center gap-3 px-2 py-1.5 rounded-lg bg-white/[0.04]">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-500 to-brand flex items-center justify-center text-xs font-bold shrink-0">
               {user.name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || 'U'}
             </div>
             <div className="min-w-0 flex-1">
@@ -128,6 +136,11 @@ export default function Sidebar() {
           </div>
         </div>
       </aside>
+
+      {/* Main content wrapper */}
+      <div className="flex-1 flex flex-col min-h-screen lg:min-h-0 overflow-hidden">
+        {children}
+      </div>
     </>
   );
 }

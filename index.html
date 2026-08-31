@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!doctype html>
 <html lang="en">
   <head>
@@ -7,32 +8,24 @@
     <title>Infinity Liquor &amp; Lounge — POS</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" href="/favicon.png" />
+
+    <!-- iOS Safari ignores manifest.webmanifest icons/behavior — these three
+         lines are what actually make "Add to Home Screen" work well on iPhone -->
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Infinity POS" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-              display: ['"Playfair Display"', 'ui-serif', 'Georgia', 'serif'],
-            },
-            colors: {
-              brand: { DEFAULT: '#7a1230', dark: '#4d0a1e', light: '#9c1d40', 50: '#fdf2f5' },
-              gold: { 400: '#e8c874', 500: '#c9a227', 600: '#a9841c' },
-              ink: { 950: '#0d0b0d', 900: '#161318', 800: '#211d24', 700: '#2f2a33', 600: '#453e49' },
-            },
-            boxShadow: {
-              soft: '0 1px 2px rgba(20,10,15,0.04), 0 4px 16px rgba(20,10,15,0.06)',
-              card: '0 1px 3px rgba(20,10,15,0.06), 0 8px 24px rgba(20,10,15,0.08)',
-              popover: '0 12px 40px rgba(10,5,8,0.25)',
-            },
-          },
-        },
-      };
-    </script>
+
+    <!-- Tailwind CDN removed — it isn't covered by the service worker's
+         precache, so it silently breaks styling on an offline repeat visit.
+         Tailwind now compiles into src/index.css at build time instead (see
+         tailwind.config.js / postcss.config.js below); that CSS file already
+         gets swept up by workbox's globPatterns. -->
+
     <style>
       html, body, #root { height: 100%; }
       body { -webkit-tap-highlight-color: transparent; overscroll-behavior: none; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }

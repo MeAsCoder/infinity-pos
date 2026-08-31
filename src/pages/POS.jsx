@@ -1,4 +1,9 @@
-// POS.jsx - Clean digital receipt without print/download buttons
+// POS.jsx - Mobile-first rewrite
+// Key change: on phones, the product grid is the whole scrollable page and
+// the cart lives in a sticky bottom bar that expands into a bottom-sheet
+// modal. This removes the old "grid + 50vh cart" nested-scroll layout that
+// kept getting clipped differently across mobile browsers. Desktop (lg+)
+// keeps the original two-pane split with independent internal scrolling.
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -7,6 +12,16 @@ import { api, apiFetch } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useSync } from '../context/SyncContext';
 import { IconPlus, IconTable, IconCash, IconPhone, IconCard, IconCredit, IconCheck, IconAlert, IconArrowLeft, IconClose, IconUser, IconPlus as IconAdd } from '../components/Icons';
+
+// Small inline chevron for the mobile cart bar — avoids depending on an
+// icon that may not exist in your Icons.jsx yet.
+function IconChevronUp({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={className}>
+      <path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function money(n) { return `KES ${Number(n || 0).toLocaleString()}`; }
 function timeAgo(iso) {
@@ -37,7 +52,7 @@ export default function POS() {
 
   async function checkShiftAndRedirect() {
     setIsLoading(true);
-    
+
     const cached = await db.currentShift.get(1);
     if (cached?.shift?.status === 'OPEN') {
       setShift(cached.shift);
@@ -71,7 +86,7 @@ export default function POS() {
         startingCash: 0,
         deviceId: deviceId
       });
-      
+
       await db.currentShift.put({ id: 1, shift: newShift });
       setShift(newShift);
     } catch (e) {
@@ -79,9 +94,9 @@ export default function POS() {
     }
   }
 
-  function showToast(msg) { 
-    setToast(msg); 
-    setTimeout(() => setToast(''), 3000); 
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
   }
 
   if (isLoading) {
@@ -100,8 +115,8 @@ export default function POS() {
         <p className="text-lg font-medium text-ink-950 mb-1">No shift is running</p>
         <p className="text-sm text-neutral-500 mb-5">Start a shift to begin taking orders.</p>
         {error && <div className="text-rose-600 text-sm mb-3">{error}</div>}
-        <button 
-          onClick={startShift} 
+        <button
+          onClick={startShift}
           className="bg-brand hover:bg-brand-dark text-white px-6 py-3 rounded-xl font-semibold transition"
         >
           Start Shift
@@ -116,52 +131,59 @@ export default function POS() {
   return (
     <div className="h-screen flex flex-col">
       <PosTopBar shift={shift} view={view} setView={setView} />
-      <div className="flex-1 overflow-hidden">
+      {/*
+        Mobile: the content area just scrolls (overflow-y-auto). There's no
+        nested fixed-height panel fighting it anymore — the cart is a sticky
+        bar + bottom sheet rendered by OrderBuilder itself.
+        Desktop (lg+): unchanged clipped pane with children managing their
+        own internal scroll (two-column layout).
+      */}
+      <div className="flex-1 overflow-y-auto lg:overflow-hidden">
         {view === 'new' && (
           <OrderBuilder
-            mode="new" 
-            shift={shift} 
+            mode="new"
+            shift={shift}
             deviceId={deviceId}
-            onDone={(msg) => { 
-              showToast(msg); 
-              setView('tabs'); 
+            onDone={(msg) => {
+              showToast(msg);
+              setView('tabs');
             }}
           />
         )}
         {view === 'tabs' && (
           <OpenTabsScreen
-            shift={shift} 
-            deviceId={deviceId} 
+            shift={shift}
+            deviceId={deviceId}
             user={user}
-            onAddItems={(tab) => { 
-              setAddTarget(tab); 
-              setView('builder-add'); 
+            onAddItems={(tab) => {
+              setAddTarget(tab);
+              setView('builder-add');
             }}
             onToast={showToast}
           />
         )}
         {view === 'builder-add' && addTarget && (
           <OrderBuilder
-            mode="add" 
-            shift={shift} 
-            deviceId={deviceId} 
+            mode="add"
+            shift={shift}
+            deviceId={deviceId}
             existingTab={addTarget}
-            onDone={(msg) => { 
-              showToast(msg); 
-              setAddTarget(null); 
-              setView('tabs'); 
+            onDone={(msg) => {
+              showToast(msg);
+              setAddTarget(null);
+              setView('tabs');
             }}
-            onCancel={() => { 
-              setAddTarget(null); 
-              setView('tabs'); 
+            onCancel={() => {
+              setAddTarget(null);
+              setView('tabs');
             }}
           />
         )}
       </div>
       {toast && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-950 text-white px-5 py-3 rounded-xl shadow-popover z-50 flex items-center gap-2 text-sm">
-          <IconCheck className="w-4 h-4 text-emerald-400" />
-          {toast}
+        <div className="fixed bottom-24 lg:bottom-5 left-1/2 -translate-x-1/2 bg-ink-950 text-white px-5 py-3 rounded-xl shadow-popover z-[60] flex items-center gap-2 text-sm max-w-[92vw]">
+          <IconCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="truncate">{toast}</span>
         </div>
       )}
     </div>
@@ -170,13 +192,13 @@ export default function POS() {
 
 function PosTopBar({ shift, view, setView }) {
   const openCount = useLiveQuery(
-    () => db.openTabs.where('shiftId').equals(shift.id).and(t => t.status === 'OPEN').count(), 
-    [shift.id], 
+    () => db.openTabs.where('shiftId').equals(shift.id).and(t => t.status === 'OPEN').count(),
+    [shift.id],
     0
   );
-  
+
   return (
-    <div className="bg-white border-b border-neutral-200 px-4 sm:px-6 py-3 flex items-center gap-2 shrink-0">
+    <div className="bg-white border-b border-neutral-200 px-2 sm:px-6 py-2 sm:py-3 flex items-center gap-1 sm:gap-2 shrink-0 overflow-x-auto">
       <TabButton active={view === 'new'} onClick={() => setView('new')} label="New Order" />
       <TabButton active={view === 'tabs' || view === 'builder-add'} onClick={() => setView('tabs')} label="Open Tabs" badge={openCount} />
     </div>
@@ -185,15 +207,15 @@ function PosTopBar({ shift, view, setView }) {
 
 function TabButton({ active, onClick, label, badge }) {
   return (
-    <button 
-      onClick={onClick} 
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition ${
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap min-h-[40px] ${
         active ? 'bg-brand text-white' : 'text-neutral-500 hover:bg-neutral-100'
       }`}
     >
       {label}
       {!!badge && (
-        <span className={`text-[11px] rounded-full px-1.5 py-0.5 ${
+        <span className={`text-[10px] rounded-full px-1.5 py-0.5 ${
           active ? 'bg-white/20' : 'bg-brand/10 text-brand'
         }`}>
           {badge}
@@ -214,11 +236,12 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
   const [pickerProduct, setPickerProduct] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   const products = useLiveQuery(() => db.products.toArray(), [], []);
 
-  useEffect(() => { 
-    if (navigator.onLine) refreshCatalogue(); 
+  useEffect(() => {
+    if (navigator.onLine) refreshCatalogue();
   }, []);
 
   async function refreshCatalogue() {
@@ -261,7 +284,7 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
   }
 
   function changeQty(id, delta) {
-    setCart(c => c.map(l => 
+    setCart(c => c.map(l =>
       l.sellingUnitId === id ? { ...l, qty: Math.max(1, l.qty + delta) } : l
     ));
   }
@@ -271,6 +294,7 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
   }
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0);
+  const itemCount = cart.reduce((s, l) => s + l.qty, 0);
 
   async function submit() {
     if (cart.length === 0) {
@@ -346,13 +370,17 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
     }
   }
 
+  const cartHeader = mode === 'new' ? 'New Order' : 'Add Items';
+
   return (
-    <div className="flex flex-col lg:flex-row h-full">
-      <div className="flex-1 p-4 overflow-y-auto">
+    <div className="flex flex-col lg:flex-row lg:h-full">
+      {/* PRODUCT SIDE — this is the whole scrollable page on mobile.
+          pb-28 keeps the last row of products clear of the sticky cart bar. */}
+      <div className="flex-1 p-3 sm:p-4 pb-28 lg:pb-4 lg:overflow-y-auto">
         {mode === 'add' && (
-          <button 
-            onClick={onCancel} 
-            className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-ink-950 mb-3 font-medium"
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-ink-950 mb-3 font-medium min-h-[40px]"
           >
             <IconArrowLeft className="w-4 h-4" /> Back to {existingTab.tab_label || existingTab.receipt_number}
           </button>
@@ -361,37 +389,37 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
           <div className="space-y-2 mb-3">
             <div className="relative">
               <IconUser className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input 
-                value={customerName} 
-                onChange={e => setCustomerName(e.target.value)} 
+              <input
+                value={customerName}
+                onChange={e => setCustomerName(e.target.value)}
                 placeholder="Customer name (optional)"
-                className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-3 text-sm bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
+                className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-3 text-base bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
               />
             </div>
             <div className="relative">
               <IconTable className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input 
-                value={tabLabel} 
-                onChange={e => setTabLabel(e.target.value)} 
+              <input
+                value={tabLabel}
+                onChange={e => setTabLabel(e.target.value)}
                 placeholder="Table / seat number (optional)"
-                className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-3 text-sm bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
+                className="w-full border border-neutral-200 rounded-xl pl-10 pr-4 py-3 text-base bg-white focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
               />
             </div>
           </div>
         )}
-        <input 
-          value={search} 
-          onChange={e => setSearch(e.target.value)} 
-          autoFocus 
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          autoFocus
           placeholder="Search product (e.g. Chrome Vodka)…"
-          className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base mb-3 bg-white shadow-soft focus:border-brand focus:ring-1 focus:ring-brand outline-none transition" 
+          className="w-full border border-neutral-200 rounded-xl px-4 py-3 text-base mb-3 bg-white shadow-soft focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
         />
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
           {filtered.map(p => (
-            <button 
-              key={p.id} 
+            <button
+              key={p.id}
               onClick={() => setPickerProduct(p)}
-              className="bg-white border border-neutral-200 rounded-xl p-3.5 text-left shadow-soft hover:shadow-card hover:border-brand/30 active:scale-[0.98] transition disabled:opacity-40 disabled:pointer-events-none"
+              className="bg-white border border-neutral-200 rounded-xl p-3 sm:p-3.5 text-left shadow-soft hover:shadow-card hover:border-brand/30 active:scale-[0.98] transition disabled:opacity-40 disabled:pointer-events-none min-h-[44px]"
               disabled={p.trackInventory && p.stockMl <= 0}
             >
               <div className="font-semibold text-sm leading-tight text-ink-950">{p.name}</div>
@@ -411,83 +439,163 @@ function OrderBuilder({ mode, shift, deviceId, existingTab, onDone, onCancel }) 
         </div>
       </div>
 
-      <div className="w-full lg:w-96 bg-white border-l border-neutral-200 flex flex-col shrink-0">
-        <div className="p-4 border-b border-neutral-100 font-semibold text-ink-950 flex justify-between items-center">
-          <span>{mode === 'new' ? 'New Order' : 'Add Items'}</span>
-          <span className="text-xs text-neutral-400 font-normal">
-            {cart.reduce((s, l) => s + l.qty, 0)} item(s)
-          </span>
-        </div>
-        <div className="flex-1 overflow-y-auto divide-y divide-neutral-100">
-          {cart.length === 0 && (
-            <div className="p-8 text-center text-neutral-400 text-sm">
-              Tap a product to add it
-            </div>
-          )}
-          {cart.map(l => (
-            <div key={l.sellingUnitId} className="p-3.5 flex justify-between items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm truncate text-ink-950">{l.productName}</div>
-                <div className="text-xs text-neutral-400">{l.unitName} · {money(l.price)} each</div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => changeQty(l.sellingUnitId, -1)} 
-                  className="w-7 h-7 bg-neutral-100 hover:bg-neutral-200 rounded-full font-bold transition"
-                >
-                  -
-                </button>
-                <span className="w-6 text-center text-sm font-medium">{l.qty}</span>
-                <button 
-                  onClick={() => changeQty(l.sellingUnitId, 1)} 
-                  className="w-7 h-7 bg-neutral-100 hover:bg-neutral-200 rounded-full font-bold transition"
-                >
-                  +
-                </button>
-              </div>
-              <div className="w-16 text-right text-sm font-semibold">{money(l.price * l.qty)}</div>
-              <button 
-                onClick={() => removeLine(l.sellingUnitId)} 
-                className="text-neutral-300 hover:text-rose-500 transition"
-              >
-                <IconClose className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="p-4 border-t border-neutral-100">
-          {err && (
-            <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-2.5 mb-3 border border-rose-100">
-              {err}
-            </div>
-          )}
-          <div className="flex justify-between text-lg font-bold mb-3 text-ink-950">
-            <span>Total</span>
-            <span>{money(subtotal)}</span>
-          </div>
-          <button 
-            disabled={cart.length === 0 || busy} 
-            onClick={submit}
-            className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-40 transition shadow-soft"
-          >
-            {busy ? 'Sending…' : mode === 'new' ? 'Send Order' : 'Add to Tab'}
-          </button>
-          {!navigator.onLine && (
-            <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2 mt-2 text-center">
-              Offline — this will sync automatically.
-            </p>
-          )}
-        </div>
+      {/* DESKTOP CART — unchanged two-pane layout, hidden below lg */}
+      <div className="hidden lg:flex lg:w-96 bg-white border-l border-neutral-200 flex-col shrink-0">
+        <CartPanelBody
+          cartHeader={cartHeader}
+          itemCount={itemCount}
+          cart={cart}
+          changeQty={changeQty}
+          removeLine={removeLine}
+          err={err}
+          subtotal={subtotal}
+          busy={busy}
+          submit={submit}
+          mode={mode}
+          listClassName="flex-1 overflow-y-auto divide-y divide-neutral-100"
+        />
       </div>
 
+      {/* MOBILE STICKY CART BAR — always visible above the page content,
+          expands into a bottom-sheet with the full cart on tap. */}
+      <button
+        onClick={() => setMobileCartOpen(true)}
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-brand text-white flex items-center justify-between px-4 py-3.5 shadow-[0_-4px_16px_rgba(0,0,0,0.15)] min-h-[56px]"
+      >
+        <span className="flex items-center gap-2 font-semibold text-sm">
+          <span className="bg-white/20 rounded-full w-6 h-6 flex items-center justify-center text-xs">{itemCount}</span>
+          {cartHeader}
+        </span>
+        <span className="flex items-center gap-1.5 font-bold">
+          {money(subtotal)}
+          <IconChevronUp className="w-4 h-4" />
+        </span>
+      </button>
+
+      {/* MOBILE CART BOTTOM SHEET */}
+      {mobileCartOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/40 z-40 flex items-end"
+          onClick={() => setMobileCartOpen(false)}
+        >
+          <div
+            className="bg-white rounded-t-2xl w-full max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-neutral-100 flex justify-between items-center shrink-0">
+              <span className="font-semibold text-ink-950">{cartHeader}</span>
+              <button
+                onClick={() => setMobileCartOpen(false)}
+                className="w-9 h-9 flex items-center justify-center text-neutral-400 hover:text-neutral-700"
+                aria-label="Close cart"
+              >
+                <IconClose className="w-5 h-5" />
+              </button>
+            </div>
+            <CartPanelBody
+              cartHeader={cartHeader}
+              itemCount={itemCount}
+              cart={cart}
+              changeQty={changeQty}
+              removeLine={removeLine}
+              err={err}
+              subtotal={subtotal}
+              busy={busy}
+              submit={() => { submit(); }}
+              mode={mode}
+              hideHeader
+              listClassName="overflow-y-auto divide-y divide-neutral-100"
+            />
+          </div>
+        </div>
+      )}
+
       {pickerProduct && (
-        <UnitPicker 
-          product={pickerProduct} 
-          onPick={(u) => addToCart(pickerProduct, u)} 
-          onClose={() => setPickerProduct(null)} 
+        <UnitPicker
+          product={pickerProduct}
+          onPick={(u) => addToCart(pickerProduct, u)}
+          onClose={() => setPickerProduct(null)}
         />
       )}
     </div>
+  );
+}
+
+// Shared cart contents, used by both the desktop side panel and the mobile
+// bottom sheet so the two never drift out of sync.
+function CartPanelBody({ cartHeader, itemCount, cart, changeQty, removeLine, err, subtotal, busy, submit, mode, hideHeader, listClassName }) {
+  return (
+    <>
+      {!hideHeader && (
+        <div className="p-4 border-b border-neutral-100 font-semibold text-ink-950 flex justify-between items-center">
+          <span>{cartHeader}</span>
+          <span className="text-xs text-neutral-400 font-normal">{itemCount} item(s)</span>
+        </div>
+      )}
+      <div className={listClassName}>
+        {cart.length === 0 && (
+          <div className="p-8 text-center text-neutral-400 text-sm">
+            Tap a product to add it
+          </div>
+        )}
+        {cart.map(l => (
+          <div key={l.sellingUnitId} className="p-3.5 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm truncate text-ink-950">{l.productName}</div>
+              <div className="text-xs text-neutral-400">{l.unitName} · {money(l.price)} each</div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => changeQty(l.sellingUnitId, -1)}
+                className="w-9 h-9 flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 rounded-full font-bold transition"
+                aria-label="Decrease quantity"
+              >
+                -
+              </button>
+              <span className="w-6 text-center text-sm font-medium">{l.qty}</span>
+              <button
+                onClick={() => changeQty(l.sellingUnitId, 1)}
+                className="w-9 h-9 flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 rounded-full font-bold transition"
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
+            </div>
+            <div className="w-16 text-right text-sm font-semibold shrink-0">{money(l.price * l.qty)}</div>
+            <button
+              onClick={() => removeLine(l.sellingUnitId)}
+              className="text-neutral-300 hover:text-rose-500 transition w-9 h-9 flex items-center justify-center shrink-0"
+              aria-label="Remove item"
+            >
+              <IconClose className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 border-t border-neutral-100 shrink-0">
+        {err && (
+          <div className="bg-rose-50 text-rose-700 text-sm rounded-lg p-2.5 mb-3 border border-rose-100">
+            {err}
+          </div>
+        )}
+        <div className="flex justify-between text-lg font-bold mb-3 text-ink-950">
+          <span>Total</span>
+          <span>{money(subtotal)}</span>
+        </div>
+        <button
+          disabled={cart.length === 0 || busy}
+          onClick={submit}
+          className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-3.5 rounded-xl disabled:opacity-40 transition shadow-soft min-h-[48px]"
+        >
+          {busy ? 'Sending…' : mode === 'new' ? 'Send Order' : 'Add to Tab'}
+        </button>
+        {!navigator.onLine && (
+          <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2 mt-2 text-center">
+            Offline — this will sync automatically.
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -501,7 +609,7 @@ function UnitPicker({ product, onPick, onClose }) {
   const getStockDisplay = () => {
     if (!product.trackInventory) return 'Not stock-tracked';
     if (stockMl <= 0) return 'Out of stock';
-    
+
     if (volume === 250) {
       const bottles = Math.floor(stockMl / 250);
       const remainder = stockMl % 250;
@@ -510,7 +618,7 @@ function UnitPicker({ product, onPick, onClose }) {
       }
       return `${bottles} bottle${bottles !== 1 ? 's' : ''}`;
     }
-    
+
     if (volume === 750) {
       const bottles = Math.floor(stockMl / 750);
       const remainder = stockMl % 750;
@@ -520,13 +628,16 @@ function UnitPicker({ product, onPick, onClose }) {
       }
       return `${bottles} bottle${bottles !== 1 ? 's' : ''}`;
     }
-    
+
     return product.stockDisplay || `${stockMl}ml`;
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-40" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-96 p-5" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-96 max-h-[85vh] overflow-y-auto p-5"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="font-display font-semibold text-lg mb-1 text-ink-950">{product.name}</div>
         <div className="text-xs text-neutral-400 mb-4">
           {getStockDisplay()}
@@ -549,14 +660,14 @@ function UnitPicker({ product, onPick, onClose }) {
                   isAvailable = false;
                 }
               }
-              
+
               return (
-                <button 
-                  key={u.id} 
+                <button
+                  key={u.id}
                   onClick={() => isAvailable && onPick(u)}
-                  className={`w-full flex justify-between items-center border rounded-xl px-4 py-3.5 transition ${
-                    isAvailable 
-                      ? 'border-neutral-200 hover:border-brand hover:bg-brand-50' 
+                  className={`w-full flex justify-between items-center border rounded-xl px-4 py-3.5 transition min-h-[48px] ${
+                    isAvailable
+                      ? 'border-neutral-200 hover:border-brand hover:bg-brand-50'
                       : 'border-neutral-200 bg-neutral-50 opacity-50 cursor-not-allowed'
                   }`}
                   disabled={!isAvailable}
@@ -571,7 +682,7 @@ function UnitPicker({ product, onPick, onClose }) {
                 </button>
               );
             })}
-          
+
           {product.sellingUnits
             .filter(u => u.active)
             .filter(unit => {
@@ -588,7 +699,7 @@ function UnitPicker({ product, onPick, onClose }) {
             </div>
           )}
         </div>
-        <button onClick={onClose} className="w-full mt-4 text-neutral-500 py-2 font-medium">
+        <button onClick={onClose} className="w-full mt-4 text-neutral-500 py-3 font-medium min-h-[44px]">
           Cancel
         </button>
       </div>
@@ -601,15 +712,15 @@ function UnitPicker({ product, onPick, onClose }) {
 // ============================================================================
 function OpenTabsScreen({ shift, deviceId, user, onAddItems, onToast }) {
   const tabs = useLiveQuery(
-    () => db.openTabs.where('shiftId').equals(shift.id).and(t => t.status === 'OPEN').toArray(), 
-    [shift.id], 
+    () => db.openTabs.where('shiftId').equals(shift.id).and(t => t.status === 'OPEN').toArray(),
+    [shift.id],
     []
   );
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { 
-    refresh(); 
+  useEffect(() => {
+    refresh();
   }, [shift.id]);
 
   async function refresh() {
@@ -646,15 +757,17 @@ function OpenTabsScreen({ shift, deviceId, user, onAddItems, onToast }) {
   }
 
   return (
-    <div className="p-4 sm:p-6 overflow-y-auto h-full">
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    // Mobile: natural height — the outer POS() wrapper scrolls the page.
+    // Desktop (lg+): bounded height with its own internal scroll, as before.
+    <div className="p-3 sm:p-6 lg:h-full lg:overflow-y-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {tabs
           .sort((a, b) => new Date(b.server_created_at || 0) - new Date(a.server_created_at || 0))
           .map(tab => (
-            <button 
-              key={tab.localId} 
+            <button
+              key={tab.localId}
               onClick={() => setDetail(tab)}
-              className="text-left bg-white border border-neutral-200 rounded-2xl p-4 shadow-soft hover:shadow-card hover:border-brand/30 transition"
+              className="text-left bg-white border border-neutral-200 rounded-2xl p-4 shadow-soft hover:shadow-card hover:border-brand/30 transition min-h-[44px]"
             >
               <div className="flex justify-between items-start mb-2">
                 <div>
@@ -688,23 +801,23 @@ function OpenTabsScreen({ shift, deviceId, user, onAddItems, onToast }) {
 
       {detail && (
         <TabDetail
-          tab={detail} 
-          shift={shift} 
+          tab={detail}
+          shift={shift}
           user={user}
           onClose={() => setDetail(null)}
-          onAddItems={(t) => { 
-            setDetail(null); 
-            onAddItems(t); 
+          onAddItems={(t) => {
+            setDetail(null);
+            onAddItems(t);
           }}
-          onSettled={(msg) => { 
-            setDetail(null); 
-            onToast(msg); 
-            refresh(); 
+          onSettled={(msg) => {
+            setDetail(null);
+            onToast(msg);
+            refresh();
           }}
-          onVoided={(msg) => { 
-            setDetail(null); 
-            onToast(msg); 
-            refresh(); 
+          onVoided={(msg) => {
+            setDetail(null);
+            onToast(msg);
+            refresh();
           }}
         />
       )}
@@ -719,7 +832,7 @@ function TabDetail({ tab, shift, user, onClose, onAddItems, onSettled, onVoided 
   const [full, setFull] = useState(tab);
   const [showSettle, setShowSettle] = useState(false);
   const [showVoid, setShowVoid] = useState(false);
-  
+
   const products = useLiveQuery(() => db.products.toArray(), [], []);
 
   useEffect(() => {
@@ -768,7 +881,7 @@ function TabDetail({ tab, shift, user, onClose, onAddItems, onSettled, onVoided 
               <span>{orderDate.toLocaleTimeString()}</span>
             </div>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 p-0.5">
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700 w-9 h-9 flex items-center justify-center shrink-0">
             <IconClose className="w-4 h-4" />
           </button>
         </div>
@@ -838,22 +951,22 @@ function TabDetail({ tab, shift, user, onClose, onAddItems, onSettled, onVoided 
 
         {/* Actions */}
         <div className="p-2.5 border-t border-neutral-100 space-y-1.5 bg-white">
-          <button 
-            onClick={() => onAddItems(full)} 
-            className="w-full flex items-center justify-center gap-1.5 border border-brand text-brand font-semibold py-1.5 rounded-lg hover:bg-brand-50 transition text-xs"
+          <button
+            onClick={() => onAddItems(full)}
+            className="w-full flex items-center justify-center gap-1.5 border border-brand text-brand font-semibold py-2.5 rounded-lg hover:bg-brand-50 transition text-xs min-h-[44px]"
           >
             <IconPlus className="w-3.5 h-3.5" /> Add Items
           </button>
-          <button 
-            onClick={() => setShowSettle(true)} 
-            className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-1.5 rounded-lg transition shadow-soft text-xs"
+          <button
+            onClick={() => setShowSettle(true)}
+            className="w-full bg-brand hover:bg-brand-dark text-white font-semibold py-2.5 rounded-lg transition shadow-soft text-xs min-h-[44px]"
           >
             Settle Bill
           </button>
           {(user.permissions.includes('sales.refund') || user.permissions.includes('*')) && (
-            <button 
-              onClick={() => setShowVoid(true)} 
-              className="w-full text-rose-500 text-[10px] font-medium py-1"
+            <button
+              onClick={() => setShowVoid(true)}
+              className="w-full text-rose-500 text-[10px] font-medium py-2 min-h-[36px]"
             >
               Void this tab
             </button>
@@ -863,8 +976,8 @@ function TabDetail({ tab, shift, user, onClose, onAddItems, onSettled, onVoided 
 
       {showSettle && (
         <SettleModal
-          tab={full} 
-          shift={shift} 
+          tab={full}
+          shift={shift}
           user={user}
           maxDiscountPercent={user.maxDiscountPercent}
           onClose={() => setShowSettle(false)}
@@ -872,10 +985,10 @@ function TabDetail({ tab, shift, user, onClose, onAddItems, onSettled, onVoided 
         />
       )}
       {showVoid && (
-        <VoidModal 
-          tab={full} 
-          onClose={() => setShowVoid(false)} 
-          onDone={onVoided} 
+        <VoidModal
+          tab={full}
+          onClose={() => setShowVoid(false)}
+          onDone={onVoided}
         />
       )}
     </div>
@@ -906,7 +1019,7 @@ function VoidModal({ tab, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto p-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-2 text-rose-600 mb-2">
           <IconAlert className="w-5 h-5" />
           <h3 className="font-semibold">Void tab</h3>
@@ -919,24 +1032,24 @@ function VoidModal({ tab, onClose, onDone }) {
             {err}
           </div>
         )}
-        <textarea 
-          value={reason} 
-          onChange={e => setReason(e.target.value)} 
-          placeholder="Reason (required)" 
-          className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-sm mb-3" 
-          rows={2} 
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Reason (required)"
+          className="w-full border border-neutral-200 rounded-lg px-3 py-2 text-base mb-3"
+          rows={2}
         />
-        <div className="flex gap-2">
-          <button 
-            onClick={onClose} 
-            className="flex-1 border border-neutral-200 rounded-xl py-2.5 text-neutral-600 font-medium"
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-neutral-200 rounded-xl py-3 text-neutral-600 font-medium min-h-[44px]"
           >
             Cancel
           </button>
-          <button 
-            disabled={busy} 
-            onClick={confirmVoid} 
-            className="flex-1 bg-rose-600 hover:bg-rose-700 text-white rounded-xl py-2.5 font-semibold transition disabled:opacity-50"
+          <button
+            disabled={busy}
+            onClick={confirmVoid}
+            className="flex-1 bg-rose-600 hover:bg-rose-700 text-white rounded-xl py-3 font-semibold transition disabled:opacity-50 min-h-[44px]"
           >
             {busy ? 'Voiding…' : 'Void Tab'}
           </button>
@@ -970,11 +1083,11 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', notes: '' });
   const customers = useLiveQuery(() => db.customers.toArray(), [], []);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (navigator.onLine) {
       api.customers()
         .then(c => db.customers.bulkPut(c))
-        .catch(() => {}); 
+        .catch(() => {});
     }
   }, []);
 
@@ -982,16 +1095,16 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
   const paid = methods.reduce((s, m) => s + (Number(m.amount) || 0), 0);
   const remaining = total - paid;
 
-  function updateMethod(i, patch) { 
-    setMethods(ms => ms.map((m, idx) => idx === i ? { ...m, ...patch } : m)); 
+  function updateMethod(i, patch) {
+    setMethods(ms => ms.map((m, idx) => idx === i ? { ...m, ...patch } : m));
   }
-  
-  function addMethod(v) { 
-    setMethods(ms => [...ms, { method: v, amount: Math.max(remaining, 0), reference: '' }]); 
+
+  function addMethod(v) {
+    setMethods(ms => [...ms, { method: v, amount: Math.max(remaining, 0), reference: '' }]);
   }
-  
-  function removeMethod(i) { 
-    setMethods(ms => ms.filter((_, idx) => idx !== i)); 
+
+  function removeMethod(i) {
+    setMethods(ms => ms.filter((_, idx) => idx !== i));
   }
 
   async function createNewCustomer() {
@@ -1012,14 +1125,14 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
       });
 
       await db.customers.put(created);
-      
+
       setCustomerId(created.id);
       setCustomerName(created.name);
       setCustomerPhone(created.phone || '');
       setShowNewCustomer(false);
       setNewCustomer({ name: '', phone: '', notes: '' });
       setErr('');
-      
+
       if (navigator.onLine) {
         const fresh = await api.customers();
         await db.customers.bulkPut(fresh);
@@ -1033,13 +1146,13 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
 
   async function submit() {
     setErr('');
-    if (remaining > 0 && !customerId) { 
-      setErr(`KES ${remaining.toLocaleString()} is unpaid — select a customer to put the balance on their credit account.`); 
-      return; 
+    if (remaining > 0 && !customerId) {
+      setErr(`KES ${remaining.toLocaleString()} is unpaid — select a customer to put the balance on their credit account.`);
+      return;
     }
-    if (remaining < 0) { 
-      setErr(`Payments exceed the total by KES ${(-remaining).toLocaleString()}. Reduce a payment amount.`); 
-      return; 
+    if (remaining < 0) {
+      setErr(`Payments exceed the total by KES ${(-remaining).toLocaleString()}. Reduce a payment amount.`);
+      return;
     }
     const discountPct = tab.subtotal > 0 ? (discount / tab.subtotal) * 100 : 0;
     if (discount > 0 && discountPct > maxDiscountPercent + 0.01) {
@@ -1048,10 +1161,10 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
     }
     setBusy(true);
     const payload = {
-      payments: methods.filter(m => m.amount > 0).map(m => ({ 
-        method: m.method, 
-        amount: Number(m.amount), 
-        reference: m.reference || undefined 
+      payments: methods.filter(m => m.amount > 0).map(m => ({
+        method: m.method,
+        amount: Number(m.amount),
+        reference: m.reference || undefined
       })),
       customerId: customerId || undefined,
       discountTotal: discount || undefined,
@@ -1059,14 +1172,14 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
     };
     try {
       const useOutbox = !navigator.onLine || isLocalTab(tab);
-      
+
       if (!useOutbox) {
         const result = await apiFetch(`/api/sales/${tab.localId}/settle`, { method: 'POST', body: payload });
         console.log('Settle result:', result);
       } else {
         await enqueue('SETTLE_TAB', crypto.randomUUID(), { ...payload, saleId: tab.localId });
       }
-      
+
       if (remaining > 0 && customerId) {
         const debtData = {
           sale_id: parseInt(tab.localId) || tab.localId,
@@ -1079,21 +1192,21 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
           notes: `Partial payment settlement - remaining balance on credit. Receipt: ${tab.receipt_number}`,
           status: 'PENDING'
         };
-        
+
         try {
           await saveLocalDebt(debtData);
         } catch (e) {
           console.warn('Could not cache debt locally:', e);
         }
       }
-      
+
       if (tab.localId) {
         const updatedTab = { ...tab, status: 'COMPLETED', settled_at: new Date().toISOString() };
         await db.openTabs.put({ ...updatedTab, localId: tab.localId, shiftId: shift.id });
       }
-      
+
       onDone(`Settled ${tab.tab_label || tab.receipt_number} — ${money(total)}${remaining > 0 ? ` (${money(remaining)} on credit)` : ''}.`);
-      
+
     } catch (e) {
       console.error('Settlement error:', e);
       setErr(e.message || 'Failed to settle tab');
@@ -1104,33 +1217,33 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-[440px] max-h-[92vh] overflow-y-auto p-5" onClick={e => e.stopPropagation()}>
-        <div className="font-display text-xl font-semibold text-ink-950 mb-1">Settle Bill</div>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:w-[440px] max-h-[92vh] overflow-y-auto p-4 sm:p-5" onClick={e => e.stopPropagation()}>
+        <div className="font-display text-lg sm:text-xl font-semibold text-ink-950 mb-1">Settle Bill</div>
         <div className="text-sm text-neutral-400 mb-4">{tab.tab_label || tab.receipt_number}</div>
 
         <div className="flex justify-between text-sm mb-1 text-neutral-600">
           <span>Subtotal</span>
           <span>{money(tab.subtotal)}</span>
         </div>
-        <div className="flex justify-between items-center text-sm mb-1 text-neutral-600">
+        <div className="flex justify-between items-center text-sm mb-1 text-neutral-600 gap-2">
           <span>Discount</span>
-          <input 
-            type="number" 
-            min="0" 
-            value={discount} 
-            onChange={e => setDiscount(Number(e.target.value) || 0)} 
-            className="w-24 border border-neutral-200 rounded-lg px-2 py-1 text-right" 
+          <input
+            type="number"
+            min="0"
+            value={discount}
+            onChange={e => setDiscount(Number(e.target.value) || 0)}
+            className="w-24 border border-neutral-200 rounded-lg px-2 py-1.5 text-base text-right"
           />
         </div>
         {discount > 0 && (
-          <input 
-            placeholder="Discount reason" 
-            value={discountReason} 
-            onChange={e => setDiscountReason(e.target.value)} 
-            className="w-full border border-neutral-200 rounded-lg px-2 py-1 text-xs mb-2" 
+          <input
+            placeholder="Discount reason"
+            value={discountReason}
+            onChange={e => setDiscountReason(e.target.value)}
+            className="w-full border border-neutral-200 rounded-lg px-2 py-2 text-base mb-2"
           />
         )}
-        <div className="flex justify-between font-bold text-xl mb-4 border-t border-neutral-200 pt-2.5 text-ink-950">
+        <div className="flex justify-between font-bold text-lg sm:text-xl mb-4 border-t border-neutral-200 pt-2.5 text-ink-950">
           <span>Total Due</span>
           <span>{money(total)}</span>
         </div>
@@ -1138,43 +1251,60 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
         <div className="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-2">Payment received</div>
         <div className="space-y-2 mb-2">
           {methods.map((m, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <select 
-                value={m.method} 
-                onChange={e => updateMethod(i, { method: e.target.value })} 
-                className="border border-neutral-200 rounded-lg px-2 py-2.5 text-sm"
-              >
-                {PAY_METHODS.map(pm => <option key={pm.v} value={pm.v}>{pm.label}</option>)}
-              </select>
-              <input 
-                type="number" 
-                value={m.amount} 
-                onChange={e => updateMethod(i, { amount: e.target.value })} 
-                className="flex-1 border border-neutral-200 rounded-lg px-2 py-2.5 text-right" 
-              />
-              {(m.method === 'MOBILE' || m.method === 'CARD') && (
-                <input 
-                  placeholder="Ref" 
-                  value={m.reference} 
-                  onChange={e => updateMethod(i, { reference: e.target.value })} 
-                  className="w-20 border border-neutral-200 rounded-lg px-2 py-2.5 text-xs" 
+            <div key={i} className="flex flex-col sm:flex-row gap-2 sm:items-center border border-neutral-100 sm:border-none rounded-lg p-2 sm:p-0">
+              <div className="flex gap-2">
+                <select
+                  value={m.method}
+                  onChange={e => updateMethod(i, { method: e.target.value })}
+                  className="flex-1 sm:flex-none border border-neutral-200 rounded-lg px-2 py-2.5 text-base"
+                >
+                  {PAY_METHODS.map(pm => <option key={pm.v} value={pm.v}>{pm.label}</option>)}
+                </select>
+                {methods.length > 1 && (
+                  <button
+                    onClick={() => removeMethod(i)}
+                    className="sm:hidden text-neutral-300 hover:text-rose-500 w-9 h-9 flex items-center justify-center shrink-0"
+                    aria-label="Remove payment method"
+                  >
+                    <IconClose className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  value={m.amount}
+                  onChange={e => updateMethod(i, { amount: e.target.value })}
+                  className="flex-1 sm:w-28 border border-neutral-200 rounded-lg px-2 py-2.5 text-base text-right"
                 />
-              )}
-              {methods.length > 1 && (
-                <button onClick={() => removeMethod(i)} className="text-neutral-300 hover:text-rose-500">
-                  <IconClose className="w-4 h-4" />
-                </button>
-              )}
+                {(m.method === 'MOBILE' || m.method === 'CARD') && (
+                  <input
+                    placeholder="Ref"
+                    value={m.reference}
+                    onChange={e => updateMethod(i, { reference: e.target.value })}
+                    className="w-24 sm:w-20 border border-neutral-200 rounded-lg px-2 py-2.5 text-sm"
+                  />
+                )}
+                {methods.length > 1 && (
+                  <button
+                    onClick={() => removeMethod(i)}
+                    className="hidden sm:flex text-neutral-300 hover:text-rose-500 w-9 h-9 items-center justify-center shrink-0"
+                    aria-label="Remove payment method"
+                  >
+                    <IconClose className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
-          <button onClick={() => addMethod('MOBILE')} className="text-brand text-sm font-semibold">
+          <button onClick={() => addMethod('MOBILE')} className="text-brand text-sm font-semibold py-1 min-h-[36px]">
             + Split payment
           </button>
         </div>
 
         <div className={`flex justify-between text-sm font-medium rounded-lg px-3 py-2 mb-3 ${
-          remaining > 0 ? 'bg-amber-50 text-amber-700' : 
-          remaining < 0 ? 'bg-rose-50 text-rose-700' : 
+          remaining > 0 ? 'bg-amber-50 text-amber-700' :
+          remaining < 0 ? 'bg-rose-50 text-rose-700' :
           'bg-emerald-50 text-emerald-700'
         }`}>
           <span>{remaining > 0 ? 'Remaining (unpaid)' : remaining < 0 ? 'Overpaid' : 'Fully paid'}</span>
@@ -1183,24 +1313,24 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
 
         {remaining > 0 && (
           <div className="mb-3 border border-amber-200 bg-amber-50/50 rounded-xl p-3">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-1.5 text-amber-800 text-xs font-semibold">
                 <IconCredit className="w-3.5 h-3.5" /> Put remaining balance on credit
               </div>
               {!customerId && (
                 <button
                   onClick={() => setShowNewCustomer(true)}
-                  className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 rounded-lg transition flex items-center gap-1"
+                  className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1.5 rounded-lg transition flex items-center gap-1 min-h-[32px]"
                 >
                   <IconAdd className="w-3 h-3" /> New Customer
                 </button>
               )}
             </div>
-            
+
             {customerId ? (
-              <div className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-sm">
-                <span className="font-medium text-ink-950">{customerName}</span>
-                <button onClick={() => { setCustomerId(null); setCustomerName(''); setCustomerPhone(''); }} className="text-xs text-neutral-400 hover:text-neutral-600">
+              <div className="flex items-center justify-between gap-2 bg-white rounded-lg px-3 py-2 text-sm">
+                <span className="font-medium text-ink-950 truncate">{customerName}</span>
+                <button onClick={() => { setCustomerId(null); setCustomerName(''); setCustomerPhone(''); }} className="text-xs text-neutral-400 hover:text-neutral-600 shrink-0">
                   change
                 </button>
               </div>
@@ -1210,32 +1340,32 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
                   placeholder="Customer name *"
                   value={newCustomer.name}
                   onChange={e => setNewCustomer(c => ({ ...c, name: e.target.value }))}
-                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                   autoFocus
                 />
                 <input
                   placeholder="Phone number"
                   value={newCustomer.phone}
                   onChange={e => setNewCustomer(c => ({ ...c, phone: e.target.value }))}
-                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                 />
                 <input
                   placeholder="Notes (optional)"
                   value={newCustomer.notes}
                   onChange={e => setNewCustomer(c => ({ ...c, notes: e.target.value }))}
-                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2 text-sm focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2.5 text-base focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <button
                     onClick={() => setShowNewCustomer(false)}
-                    className="flex-1 border border-neutral-200 rounded-lg py-1.5 text-sm text-neutral-600 hover:bg-neutral-50 transition"
+                    className="flex-1 border border-neutral-200 rounded-lg py-2 text-sm text-neutral-600 hover:bg-neutral-50 transition min-h-[40px]"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={createNewCustomer}
                     disabled={busy || !newCustomer.name.trim()}
-                    className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-1.5 text-sm font-medium transition disabled:opacity-50"
+                    className="flex-1 bg-brand hover:bg-brand-dark text-white rounded-lg py-2 text-sm font-medium transition disabled:opacity-50 min-h-[40px]"
                   >
                     {busy ? 'Creating...' : 'Create & Select'}
                   </button>
@@ -1243,30 +1373,30 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
               </div>
             ) : (
               <>
-                <input 
-                  placeholder="Search customer by name/phone…" 
-                  value={customerSearch} 
-                  onChange={e => setCustomerSearch(e.target.value)} 
-                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2 text-sm mb-1.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                <input
+                  placeholder="Search customer by name/phone…"
+                  value={customerSearch}
+                  onChange={e => setCustomerSearch(e.target.value)}
+                  className="w-full border border-neutral-200 rounded-lg px-2.5 py-2.5 text-base mb-1.5 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
                 />
                 <div className="max-h-32 overflow-y-auto border border-neutral-200 rounded-lg bg-white">
                   {(customers || [])
-                    .filter(c => c.name?.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                    .filter(c => c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
                            (c.phone && c.phone.includes(customerSearch)))
                     .slice(0, 20)
                     .map(c => (
-                      <button 
-                        key={c.id} 
-                        onClick={() => { 
-                          setCustomerId(c.id); 
-                          setCustomerName(c.name); 
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setCustomerId(c.id);
+                          setCustomerName(c.name);
                           setCustomerPhone(c.phone || '');
-                          setCustomerSearch(''); 
-                        }} 
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex justify-between"
+                          setCustomerSearch('');
+                        }}
+                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-neutral-50 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-0.5 min-h-[44px]"
                       >
-                        <span>{c.name}</span>
-                        <span className="text-neutral-400 text-xs">
+                        <span className="truncate">{c.name}</span>
+                        <span className="text-neutral-400 text-xs shrink-0">
                           {c.phone || 'no phone'} · owes {money(c.balance || 0)}
                         </span>
                       </button>
@@ -1293,17 +1423,17 @@ function SettleModal({ tab, shift, user, maxDiscountPercent, onClose, onDone }) 
           </div>
         )}
 
-        <div className="flex gap-2">
-          <button 
-            onClick={onClose} 
-            className="flex-1 border border-neutral-200 rounded-xl py-3 text-neutral-600 font-medium"
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 border border-neutral-200 rounded-xl py-3 text-neutral-600 font-medium min-h-[44px]"
           >
             Cancel
           </button>
-          <button 
-            disabled={busy} 
-            onClick={submit} 
-            className="flex-1 bg-brand hover:bg-brand-dark text-white font-semibold rounded-xl py-3 transition disabled:opacity-50"
+          <button
+            disabled={busy}
+            onClick={submit}
+            className="flex-1 bg-brand hover:bg-brand-dark text-white font-semibold rounded-xl py-3 transition disabled:opacity-50 min-h-[44px]"
           >
             {busy ? 'Processing…' : 'Confirm Settlement'}
           </button>
